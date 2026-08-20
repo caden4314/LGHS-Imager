@@ -58,17 +58,15 @@ try {
     Set-LghsDirectEthernet
 
     $SourceApp=Join-Path $Root 'app\LGHS-Imager-v4.ps1'
-    $HelperScript=Join-Path $Root 'app\LGHS-StockBootstrap-v9.ps1'
+    $HelperScript=Join-Path $Root 'app\LGHS-StockBootstrap-v11.ps1'
     Assert-PowerShellSyntax $SourceApp
     Assert-PowerShellSyntax $HelperScript
 
     $RuntimeScript=Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
     $appText=Get-Content $SourceApp -Raw
-    $appText=$appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v9.ps1')
+    $appText=$appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v11.ps1')
     $appText=$appText.Replace('$credentials=$null;$firstRunPath=$null','$credentials=$null;$cloudInitPath=$null')
 
-    # Resolve the image through the persistent cache immediately after the
-    # normal source resolver returns. Local/published files pass through.
     $appText=$appText.Replace('$source=Resolve-ImageSource $role','$source=Resolve-ImageSource $role;$source=Resolve-LghsCachedImage $source')
 
     $oldBootstrap=@'
@@ -79,14 +77,14 @@ try {
     $newBootstrap=@'
             $cloudInitPath=Join-Path $env:TEMP ("lghs-cloudinit-{0}.yaml" -f [Guid]::NewGuid().ToString('N'))
             [IO.File]::WriteAllText($cloudInitPath,(New-LghsCloudInitUserData $role),[Text.UTF8Encoding]::new($false))
-            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log 'LGHS cloud-init attached: SSH first, nonblocking stage-2 handoff.'
+            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log 'LGHS cloud-init attached: SSH credentials primed, LF-safe payloads, nonblocking stage-2 handoff.'
 '@
     if(-not$appText.Contains($oldBootstrap)){throw 'Could not patch legacy first-run bootstrap block.'}
     $appText=$appText.Replace($oldBootstrap,$newBootstrap)
     $appText=$appText.Replace('}finally{if($firstRunPath){Remove-Item $firstRunPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}','}finally{if($cloudInitPath){Remove-Item $cloudInitPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}')
     $appText=$appText.Replace("Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS first-run bootstrap.'","Append-Log 'Using Raspberry Pi OS with LGHS cloud-init. Image cache is reused when available.'")
-    $appText=$appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Stock Raspberry Pi OS uses the local cache when available; LGHS stage 2 no longer blocks cloud-init.'")
-    $appText=$appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'SSH comes up first; cloud-init hands LGHS stage 2 to systemd without waiting on the Welcome screen.'}")
+    $appText=$appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Stock Raspberry Pi OS uses the local cache; Linux payloads are LF-normalized before eject.'")
+    $appText=$appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'SSH credentials are primed before stage 2; all Linux boot payloads are LF-only; stage 2 runs under systemd.'}")
 
     if($appText-match'--first-run-script|lghs-firstrun'){throw 'Safety check failed: legacy first-run injection remains.'}
     if($appText-notmatch'--cloudinit-userdata'){throw 'Safety check failed: cloud-init injection missing.'}
@@ -94,7 +92,7 @@ try {
 
     [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
     Assert-PowerShellSyntax $RuntimeScript
-    Write-LaunchLog 'Runtime validation passed: bootstrap v9 + image cache.'
+    Write-LaunchLog 'Runtime validation passed: bootstrap v11 + image cache + LF enforcement.'
     & $RuntimeScript -SkipUpdate
 }catch{
     Write-LaunchLog "FATAL: $($_|Out-String)"
