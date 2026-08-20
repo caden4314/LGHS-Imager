@@ -18,6 +18,13 @@
     "telemetry": false,
     "silentSelfUpdate": true
   },
+  "accounts": {
+    "user": "lg_cs_cont",
+    "admin": "cs_admin",
+    "root": "root",
+    "promptPerDevice": true,
+    "defaultRootSameAsAdmin": true
+  },
   "batch": {
     "studentPrefix": "CS-",
     "firstDevice": 1,
