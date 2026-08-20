@@ -11,6 +11,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Upstream = Join-Path $Root 'upstream'
 $Build = Join-Path $Root 'build'
 $Package = Join-Path $Root 'package'
+$Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 
 if (-not (Test-Path (Join-Path $Upstream '.git'))) {
     & (Join-Path $PSScriptRoot 'bootstrap-upstream.ps1')
@@ -19,6 +20,7 @@ if (-not $QtRoot) { throw 'Set QT6_ROOT to your Qt 6 mingw_64 directory.' }
 if (-not $MingwRoot) { throw 'Set MINGW64_ROOT to your MinGW64 toolchain directory.' }
 
 Write-Host 'LGHS Imager Windows build'
+Write-Host "  Version:         $Version"
 Write-Host '  Target hardware: Raspberry Pi 5 8GB'
 Write-Host '  Host platform:   Windows x64'
 Write-Host "  Build type:      $BuildType"
@@ -44,7 +46,6 @@ Copy-Item (Join-Path $Root 'LGHS-Imager.cmd') $Package
 Copy-Item (Join-Path $Root 'LGHS-Imager.vbs') $Package
 Copy-Item (Join-Path $Root 'VERSION') $Package
 
-# Deploy the Qt runtime used by the writer backend.
 $windeployqt = Join-Path $QtRoot 'bin\windeployqt.exe'
 if (-not (Test-Path $windeployqt)) { throw "windeployqt.exe not found under $QtRoot" }
 & $windeployqt --release --no-translations (Join-Path $Package 'backend\rpi-imager.exe')
@@ -58,7 +59,7 @@ if (-not $SkipInstaller) {
         if (Test-Path $defaultIscc) { $iscc = Get-Item $defaultIscc }
     }
     if ($iscc) {
-        & $iscc.Source "/DSourceRoot=$Package" (Join-Path $Root 'installer\LGHS-Imager.iss')
+        & $iscc.Source "/DSourceRoot=$Package" "/DAppVersion=$Version" (Join-Path $Root 'installer\LGHS-Imager.iss')
     } else {
         Write-Warning 'Inno Setup was not found. Portable package was built, installer skipped.'
     }
