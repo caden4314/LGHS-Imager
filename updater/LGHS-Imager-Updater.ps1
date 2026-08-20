@@ -15,10 +15,20 @@ if (-not $config.updater.enabled) { exit 0 }
 
 $current = if (Test-Path $VersionPath) { (Get-Content $VersionPath -Raw).Trim() } else { '0.0.0' }
 $headers = @{ 'User-Agent' = 'LGHS-Imager-Updater' }
-$release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$($config.updater.githubRepository)/releases/latest" -TimeoutSec 10
+
+try {
+    $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$($config.updater.githubRepository)/releases/latest" -TimeoutSec 10
+} catch {
+    $response = $_.Exception.Response
+    if ($response -and [int]$response.StatusCode -eq 404) {
+        # No published release exists yet. This is normal during development.
+        exit 0
+    }
+    throw
+}
+
 if (-not $release -or $release.draft -or $release.prerelease) { exit 0 }
-$latest = [string]$release.tag_name
-$latest = $latest.TrimStart('v')
+$latest = ([string]$release.tag_name).TrimStart('v')
 
 try {
     $needsUpdate = $Force -or ([version]$latest -gt [version]$current)
@@ -43,7 +53,7 @@ try {
     $expected = ((Get-Content $checksumFile -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
     $actual = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
     if (-not $expected -or $expected -ne $actual) {
-        throw "LGHS Imager update checksum mismatch."
+        throw 'LGHS Imager update checksum mismatch.'
     }
 
     $args = [string]$config.updater.silentInstallerArguments
