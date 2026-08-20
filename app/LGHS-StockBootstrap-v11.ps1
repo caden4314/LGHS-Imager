@@ -20,25 +20,24 @@ function Convert-LghsFileToLf([string]$Path) {
 }
 
 function New-LghsCloudInitUserData([string]$Role) {
-    # Keep the cloud-init YAML LF-only as well as the FAT provisioning payloads.
     $raw = & $script:LghsV10CloudInit $Role
     return (Convert-LghsTextToLf $raw)
 }
 
 function Select-LghsPi5RamProfile {
+    if ($script:LghsHardwareRamGb -in @(4,8)) { return [int]$script:LghsHardwareRamGb }
     $choice = [System.Windows.MessageBox]::Show(
         "Select the Raspberry Pi 5 RAM profile for this flash.`n`nYES = Pi 5 4 GB`nNO  = Pi 5 8 GB`n`nBoth use the same Raspberry Pi OS 64-bit image.",
         'LGHS Pi 5 hardware profile',
         [System.Windows.MessageBoxButton]::YesNo,
         [System.Windows.MessageBoxImage]::Question
     )
-    if ($choice -eq [System.Windows.MessageBoxResult]::Yes) { return 4 }
+    if ($choice -eq [System.Windows.MessageBoxResult]::Yes) { $script:LghsHardwareRamGb=4; return 4 }
+    $script:LghsHardwareRamGb=8
     return 8
 }
 
 function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Role,$Credentials,$Config,[bool]$StockBootstrap) {
-    # The image itself is common to both RAM capacities, so choosing the profile
-    # during provisioning is safe and still happens once for every managed flash.
     $ram = Select-LghsPi5RamProfile
     & $script:LghsV10WriteProvisioning $DriveRoot $DeviceId $Role $Credentials $Config $StockBootstrap
 
@@ -57,12 +56,8 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
         $stage2Path = Join-Path $DriveRoot 'lghs-stage2.sh'
         if (Test-Path $stage2Path) {
             $stage2 = [IO.File]::ReadAllText($stage2Path)
-            # Older bootstrap source hard-coded 8 GB in /etc/lghs/device.conf.
             $stage2 = $stage2.Replace('MEMORY_GB=8',"MEMORY_GB=$ram")
 
-            # Record a non-fatal first-boot sanity check. Usable RAM is below the
-            # marketed capacity, so >= 6 GiB MemTotal is classified as the 8 GB
-            # model; lower Pi 5 test units are classified as 4 GB.
             $marker = 'ARCH=arm64'
             $check = @"
 ARCH=arm64
@@ -93,8 +88,6 @@ fi
         Convert-LghsFileToLf (Join-Path $DriveRoot $name)
     }
 
-    # Fail before card release if CR bytes survive in a Linux payload. This was
-    # the cause of the earlier bash/base64 first-boot failure.
     foreach ($name in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf')) {
         $path = Join-Path $DriveRoot $name
         if (Test-Path $path) {
