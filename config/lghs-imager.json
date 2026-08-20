@@ -1,0 +1,29 @@
+{
+  "productName": "LGHS Imager",
+  "organization": "LGHS",
+  "platform": "windows-x64",
+  "target": {
+    "board": "Raspberry Pi 5",
+    "imagerDeviceId": "pi5",
+    "requiredMemoryGb": 8,
+    "architecture": "arm64"
+  },
+  "features": {
+    "studentImage": true,
+    "controllerImage": true,
+    "localImage": true,
+    "batchMode": true,
+    "verifySha256": true,
+    "verifyWrite": true,
+    "telemetry": false
+  },
+  "batch": {
+    "studentPrefix": "CS-",
+    "firstDevice": 1,
+    "padding": 2,
+    "controllerHostname": "LGCSCONT"
+  },
+  "repository": {
+    "manifest": "os-list/lghs-os-list.json"
+  }
+}
