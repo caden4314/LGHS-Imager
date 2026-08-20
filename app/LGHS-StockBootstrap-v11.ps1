@@ -41,7 +41,6 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
     $ram = Select-LghsPi5RamProfile
     & $script:LghsV10WriteProvisioning $DriveRoot $DeviceId $Role $Credentials $Config $StockBootstrap
 
-    # Replace the legacy 8 GB metadata with the explicitly selected profile.
     $publicPath = Join-Path $DriveRoot 'lghs-provision.conf'
     if (Test-Path $publicPath) {
         $text = [IO.File]::ReadAllText($publicPath)
@@ -62,18 +61,19 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
         }
     }
 
+    # All Linux-consumed text, including the deployment key material, is written
+    # BOM-less with LF endings before the card is released.
     foreach ($name in @(
         'lghs-stage2.sh',
         'lghs-provision.conf',
         'lghs-provision-secrets.conf',
-        'lghs-controller-key.pub'
+        'lghs-controller-key.pub',
+        'lghs-controller-key'
     )) {
         Convert-LghsFileToLf (Join-Path $DriveRoot $name)
     }
 
-    # Fail before card release if CR bytes survive in any critical Linux
-    # payload. This is the exact class of failure that broke the earlier flash.
-    foreach ($name in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf')) {
+    foreach ($name in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf','lghs-controller-key.pub','lghs-controller-key')) {
         $path = Join-Path $DriveRoot $name
         if (Test-Path $path) {
             $bytes = [IO.File]::ReadAllBytes($path)
