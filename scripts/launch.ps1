@@ -67,6 +67,34 @@ try {
     $appText=$appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v11.ps1')
     $appText=$appText.Replace('$credentials=$null;$firstRunPath=$null','$credentials=$null;$cloudInitPath=$null')
 
+    # Every managed Control/Student flash explicitly chooses the Pi 5 memory
+    # profile before the destructive write. Both profiles use the same arm64 OS.
+    $oldFlashHead=@'
+function Start-Flash {
+    if($script:Busy){return}
+    if(-not$DriveBox.SelectedItem){[System.Windows.MessageBox]::Show('Insert and select an SD card first.','LGHS Imager')|Out-Null;return}
+'@
+    $newFlashHead=@'
+function Select-LghsPi5RamProfileBeforeFlash {
+    $choice=[System.Windows.MessageBox]::Show("Select the Raspberry Pi 5 RAM profile for this flash.`n`nYES = Pi 5 4 GB`nNO  = Pi 5 8 GB`nCANCEL = do not flash`n`nBoth use the same Raspberry Pi OS 64-bit image.",'LGHS Pi 5 hardware profile',[System.Windows.MessageBoxButton]::YesNoCancel,[System.Windows.MessageBoxImage]::Question)
+    if($choice-eq[System.Windows.MessageBoxResult]::Yes){return 4}
+    if($choice-eq[System.Windows.MessageBoxResult]::No){return 8}
+    return $null
+}
+
+function Start-Flash {
+    if($script:Busy){return}
+    if(-not$DriveBox.SelectedItem){[System.Windows.MessageBox]::Show('Insert and select an SD card first.','LGHS Imager')|Out-Null;return}
+    if($script:Mode-ne'local'){
+        $ramChoice=Select-LghsPi5RamProfileBeforeFlash
+        if($null-eq$ramChoice){return}
+        $script:LghsHardwareRamGb=[int]$ramChoice
+        Append-Log "Hardware profile selected: Raspberry Pi 5 / $ramChoice GB RAM"
+    }
+'@
+    if(-not$appText.Contains($oldFlashHead)){throw 'Could not patch the pre-flash hardware-profile selector.'}
+    $appText=$appText.Replace($oldFlashHead,$newFlashHead)
+
     $appText=$appText.Replace('$source=Resolve-ImageSource $role','$source=Resolve-ImageSource $role;$source=Resolve-LghsCachedImage $source')
 
     $oldBootstrap=@'
@@ -89,10 +117,11 @@ try {
     if($appText-match'--first-run-script|lghs-firstrun'){throw 'Safety check failed: legacy first-run injection remains.'}
     if($appText-notmatch'--cloudinit-userdata'){throw 'Safety check failed: cloud-init injection missing.'}
     if($appText-notmatch'Resolve-LghsCachedImage'){throw 'Safety check failed: image cache hook missing.'}
+    if($appText-notmatch'LghsHardwareRamGb'){throw 'Safety check failed: Pi 5 4/8 GB hardware selector missing.'}
 
     [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
     Assert-PowerShellSyntax $RuntimeScript
-    Write-LaunchLog 'Runtime validation passed: bootstrap v11 + image cache + LF enforcement.'
+    Write-LaunchLog 'Runtime validation passed: bootstrap v11 + Pi 5 4/8 GB selector + image cache + LF enforcement.'
     & $RuntimeScript -SkipUpdate
 }catch{
     Write-LaunchLog "FATAL: $($_|Out-String)"
