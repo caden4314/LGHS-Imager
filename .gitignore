@@ -1,0 +1,13 @@
+upstream/
+build/
+.vscode/
+*.user
+*.log
+*.exe
+*.msi
+*.zip
+*.img
+*.img.xz
+*.img.gz
+secrets/
+config/local.json
