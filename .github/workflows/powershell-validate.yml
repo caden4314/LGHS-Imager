@@ -1,0 +1,35 @@
+name: PowerShell Validate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  parse:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse active PowerShell entrypoints
+        shell: powershell
+        run: |
+          $files = @(
+            'scripts\launch.ps1',
+            'app\LGHS-Imager-v4.ps1',
+            'app\LGHS-StockBootstrap-v2.ps1'
+          )
+          $failed = $false
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors)
+            if ($errors.Count) {
+              $failed = $true
+              Write-Host "Syntax errors in $file" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host ("line {0}: {1}" -f $_.Extent.StartLineNumber,$_.Message) -ForegroundColor Red }
+            } else {
+              Write-Host "PASS $file" -ForegroundColor Green
+            }
+          }
+          if ($failed) { throw 'LGHS Imager PowerShell syntax validation failed.' }
