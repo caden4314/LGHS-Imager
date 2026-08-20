@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-2025
+    runs-on: windows-latest
     timeout-minutes: 90
 
     steps:
@@ -35,33 +35,67 @@ jobs:
         shell: powershell
         run: |
           choco install -y cmake ninja innosetup
+          cmake --version
+          ninja --version
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found at $iscc" }
+          & $iscc /?
 
-      - name: Install Qt 6.11.1 MinGW
-        uses: jurplel/install-qt-action@v4
+      - name: Install Qt 6.11.1 and MinGW 13.1
+        uses: jurplel/install-qt-action@v4.2.0
         with:
           version: '6.11.1'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_mingw'
-          tools: 'tools_mingw1310'
+          tools: 'tools_mingw1310,qt.tools.win64_mingw1310'
+          add-tools-to-path: true
+          set-env: true
           cache: true
+          aqtversion: '==3.3.*'
 
-      - name: Locate Qt and MinGW
+      - name: Locate and verify Qt toolchain
         id: qt
         shell: powershell
         run: |
+          Write-Host "QT_ROOT_DIR=$env:QT_ROOT_DIR"
+          Write-Host "Qt6_DIR=$env:Qt6_DIR"
+          Write-Host "IQTA_TOOLS=$env:IQTA_TOOLS"
+
           $qt = $env:QT_ROOT_DIR
           if (-not $qt -and $env:Qt6_DIR) {
             $qt = Split-Path -Parent (Split-Path -Parent $env:Qt6_DIR)
           }
-          if (-not $qt) { throw 'Qt root could not be located.' }
-          $gcc = (Get-Command gcc.exe -ErrorAction SilentlyContinue).Source
-          if (-not $gcc) { throw 'MinGW gcc.exe was not found after Qt setup.' }
-          $mingw = Split-Path -Parent (Split-Path -Parent $gcc)
+          if (-not $qt -or -not (Test-Path $qt)) {
+            throw "Qt root could not be located. QT_ROOT_DIR='$env:QT_ROOT_DIR' Qt6_DIR='$env:Qt6_DIR'"
+          }
+
+          $gccCmd = Get-Command gcc.exe -ErrorAction SilentlyContinue
+          if (-not $gccCmd) {
+            Write-Host 'PATH entries containing mingw:'
+            ($env:PATH -split ';' | Where-Object { $_ -match 'mingw' }) | ForEach-Object { Write-Host "  $_" }
+            if ($env:IQTA_TOOLS) {
+              Get-ChildItem $env:IQTA_TOOLS -Recurse -Filter gcc.exe -ErrorAction SilentlyContinue | Select-Object -First 20 FullName
+            }
+            throw 'MinGW gcc.exe was not found after Qt setup.'
+          }
+
+          $gcc = $gccCmd.Source
+          $mingwBin = Split-Path -Parent $gcc
+          $mingw = Split-Path -Parent $mingwBin
+
+          $qmake = Join-Path $qt 'bin\qmake.exe'
+          $windeployqt = Join-Path $qt 'bin\windeployqt.exe'
+          if (-not (Test-Path $qmake)) { throw "qmake.exe not found at $qmake" }
+          if (-not (Test-Path $windeployqt)) { throw "windeployqt.exe not found at $windeployqt" }
+
+          & $gcc --version
+          & $qmake -v
+
           "qt=$qt" >> $env:GITHUB_OUTPUT
           "mingw=$mingw" >> $env:GITHUB_OUTPUT
-          Write-Host "Qt: $qt"
-          Write-Host "MinGW: $mingw"
+          Write-Host "Qt root:    $qt"
+          Write-Host "MinGW root: $mingw"
 
       - name: Bootstrap Raspberry Pi Imager upstream
         shell: powershell
@@ -75,6 +109,16 @@ jobs:
       - name: Create SHA256 release asset
         shell: powershell
         run: .\scripts\make-release-assets.ps1
+
+      - name: Verify release files
+        shell: powershell
+        run: |
+          $exe = 'dist\LGHS-Imager-Setup-x64.exe'
+          $sha = 'dist\LGHS-Imager-Setup-x64.exe.sha256'
+          if (-not (Test-Path $exe)) { throw "$exe was not produced" }
+          if (-not (Test-Path $sha)) { throw "$sha was not produced" }
+          Get-Item $exe, $sha | Format-Table Name, Length, LastWriteTime
+          Get-FileHash -Algorithm SHA256 $exe
 
       - name: Upload Windows build artifact
         uses: actions/upload-artifact@v4
