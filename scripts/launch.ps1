@@ -10,7 +10,7 @@ function Write-LaunchLog([string]$Message) {
 }
 
 Write-LaunchLog "Starting LGHS Imager from $Root"
-Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME / elevated check pending"
+Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME"
 
 try {
     # Development/source checkouts follow main automatically when they are clean.
@@ -45,27 +45,25 @@ try {
         Write-LaunchLog "Updater check failed: $($_.Exception.Message)"
     }
 
-    # Raw-disk enumeration and post-write provisioning require elevation.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     Write-LaunchLog "Elevated=$isAdmin"
 
-    $AppScript = Join-Path $Root 'app\LGHS-Imager.ps1'
-    if (-not (Test-Path $AppScript)) {
-        throw "Application script not found: $AppScript"
-    }
-
     if (-not $isAdmin) {
-        Write-LaunchLog 'Requesting elevation through UAC.'
-        $argLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -SkipUpdate -LauncherLog "{1}"' -f $AppScript, $LogFile
+        Write-LaunchLog 'Requesting elevation through UAC and relaunching logging wrapper.'
+        $Self = $MyInvocation.MyCommand.Path
+        $argLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $Self
         $proc = Start-Process powershell.exe -Verb RunAs -ArgumentList $argLine -PassThru
-        Write-LaunchLog "Elevated process started, PID=$($proc.Id)"
+        Write-LaunchLog "Elevated wrapper started, PID=$($proc.Id)"
         exit 0
     }
 
-    Write-LaunchLog 'Launching application in current elevated process.'
-    & $AppScript -SkipUpdate -LauncherLog $LogFile
+    $AppScript = Join-Path $Root 'app\LGHS-Imager.ps1'
+    if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
+
+    Write-LaunchLog 'Launching WPF application.'
+    & $AppScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
 }
 catch {
