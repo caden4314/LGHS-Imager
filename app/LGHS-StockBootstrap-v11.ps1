@@ -21,7 +21,8 @@ function Convert-LghsFileToLf([string]$Path) {
 
 function New-LghsCloudInitUserData([string]$Role) {
     # Keep the cloud-init YAML LF-only as well as the FAT provisioning payloads.
-    return Convert-LghsTextToLf (& $script:LghsV10CloudInit $Role)
+    $raw = & $script:LghsV10CloudInit $Role
+    return (Convert-LghsTextToLf $raw)
 }
 
 function Select-LghsPi5RamProfile {
