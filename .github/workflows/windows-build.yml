@@ -51,10 +51,10 @@ jobs:
           Write-Host "Inno Setup compiler: $iscc"
           Write-Host "Inno Setup version: $($isccInfo.FileVersion)"
 
-      - name: Install Qt 6.11.1 and MinGW 13.1
+      - name: Install Qt 6.9.3 and MinGW 13.1
         uses: jurplel/install-qt-action@v4.2.0
         with:
-          version: '6.11.1'
+          version: '6.9.3'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_mingw'
