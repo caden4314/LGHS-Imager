@@ -5,7 +5,8 @@
   "target": {
     "board": "Raspberry Pi 5",
     "imagerDeviceId": "pi5",
-    "requiredMemoryGb": 8,
+    "requiredMemoryGb": 4,
+    "supportedMemoryGb": [4, 8],
     "architecture": "arm64"
   },
   "features": {
