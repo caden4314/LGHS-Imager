@@ -9,6 +9,16 @@ function Write-LaunchLog([string]$Message) {
     Add-Content -Path $LogFile -Value $line -Encoding utf8
 }
 
+function Assert-PowerShellSyntax([string]$Path) {
+    $tokens = $null
+    $errors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($Path,[ref]$tokens,[ref]$errors)
+    if ($errors.Count -gt 0) {
+        $detail = ($errors | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" }) -join "`n"
+        throw "PowerShell syntax validation failed for $Path`n$detail"
+    }
+}
+
 Write-LaunchLog "Starting LGHS Imager from $Root"
 Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME"
 
@@ -33,15 +43,13 @@ try {
         }
     }
 
-    try {
-        $Updater = Join-Path $Root 'updater\LGHS-Imager-Updater.ps1'
-        if (Test-Path $Updater) {
-            Write-LaunchLog 'Running automatic updater check.'
-            & $Updater
-        }
-    } catch {
-        Write-LaunchLog "Updater check failed: $($_.Exception.Message)"
-    }
+    $AppScript = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
+    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v2.ps1'
+    if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
+    if (-not (Test-Path $HelperScript)) { throw "Bootstrap helper not found: $HelperScript" }
+    Assert-PowerShellSyntax $AppScript
+    Assert-PowerShellSyntax $HelperScript
+    Write-LaunchLog 'LGHS Imager v4 PowerShell syntax validation passed.'
 
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -49,7 +57,7 @@ try {
     Write-LaunchLog "Elevated=$isAdmin"
 
     if (-not $isAdmin) {
-        Write-LaunchLog 'Requesting elevation through UAC and relaunching logging wrapper.'
+        Write-LaunchLog 'Requesting elevation through UAC.'
         $Self = $MyInvocation.MyCommand.Path
         $argLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $Self
         $proc = Start-Process powershell.exe -Verb RunAs -ArgumentList $argLine -PassThru
@@ -57,10 +65,7 @@ try {
         exit 0
     }
 
-    $AppScript = Join-Path $Root 'app\LGHS-Imager-v3.ps1'
-    if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
-
-    Write-LaunchLog 'Launching unified WPF application with stock-image self-build fallback.'
+    Write-LaunchLog 'Launching LGHS Imager v4.'
     & $AppScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
 }
