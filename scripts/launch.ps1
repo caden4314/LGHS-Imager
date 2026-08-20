@@ -85,7 +85,7 @@ try {
     }
 
     $SourceApp = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
-    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v5.ps1'
+    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v6.ps1'
     if (-not (Test-Path $SourceApp)) { throw "Application script not found: $SourceApp" }
     if (-not (Test-Path $HelperScript)) { throw "Bootstrap helper not found: $HelperScript" }
     Assert-PowerShellSyntax $SourceApp
@@ -107,14 +107,11 @@ try {
 
     Set-LghsDirectEthernet
 
-    # Keep the stable v4 WPF UI, but change the stock-image path to current
-    # Raspberry Pi OS cloud-init customisation. No firstrun.sh or systemd.run is
-    # created by this runtime.
     $RuntimeScript = Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
     $appText = Get-Content $SourceApp -Raw
-    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v5.ps1')
+    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v6.ps1')
     $appText = $appText.Replace('$credentials=$null;$firstRunPath=$null','$credentials=$null;$cloudInitPath=$null')
-    $appText = $appText.Replace("Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS first-run bootstrap.'","Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with cloud-init provisioning.'")
+    $appText = $appText.Replace("Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS first-run bootstrap.'","Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS-managed cloud-init provisioning.'")
 
     $oldBootstrap = @'
             $firstRunPath=Join-Path $env:TEMP ("lghs-firstrun-{0}.sh" -f [Guid]::NewGuid().ToString('N'))
@@ -124,13 +121,13 @@ try {
     $newBootstrap = @'
             $cloudInitPath=Join-Path $env:TEMP ("lghs-cloudinit-{0}.yaml" -f [Guid]::NewGuid().ToString('N'))
             [IO.File]::WriteAllText($cloudInitPath,(New-LghsCloudInitUserData),[Text.UTF8Encoding]::new($false))
-            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log 'LGHS cloud-init bootstrap attached; legacy firstrun disabled.'
+            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log 'LGHS cloud-init attached; Raspberry Pi setup wizard is suppressed.'
 '@
     if (-not $appText.Contains($oldBootstrap)) { throw 'Could not patch stock bootstrap block in LGHS Imager v4.' }
     $appText = $appText.Replace($oldBootstrap,$newBootstrap)
-    $appText = $appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'Cloud-init starts LGHS stage 2 during a normal boot. LGHS-System installation retries when network becomes available.'}")
+    $appText = $appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'LGHS replaces the Raspberry Pi setup wizard, provisions locally, then reboots once into the managed desktop.'}")
     $appText = $appText.Replace('}finally{if($firstRunPath){Remove-Item $firstRunPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}','}finally{if($cloudInitPath){Remove-Item $cloudInitPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}')
-    $appText = $appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with cloud-init provisioning; firstrun/systemd.run is not used.'")
+    $appText = $appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Missing LGHS images use cloud-init; LGHS owns first boot and the Raspberry Pi setup wizard is disabled.'")
 
     if ($appText -match '--first-run-script|lghs-firstrun') {
         throw 'Safety check failed: legacy first-run injection is still present in the runtime.'
@@ -141,7 +138,7 @@ try {
 
     [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
     Assert-PowerShellSyntax $RuntimeScript
-    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; cloud-init bootstrap v5 selected.'
+    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; wizard-free cloud-init bootstrap v6 selected.'
 
     Write-LaunchLog 'Launching LGHS Imager.'
     & $RuntimeScript -SkipUpdate
