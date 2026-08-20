@@ -57,10 +57,10 @@ try {
         exit 0
     }
 
-    $AppScript = Join-Path $Root 'app\LGHS-Imager-v2.ps1'
+    $AppScript = Join-Path $Root 'app\LGHS-Imager-v3.ps1'
     if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
 
-    Write-LaunchLog 'Launching redesigned WPF application.'
+    Write-LaunchLog 'Launching unified WPF application with stock-image self-build fallback.'
     & $AppScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
 }
