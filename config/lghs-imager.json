@@ -15,15 +15,25 @@
     "batchMode": true,
     "verifySha256": true,
     "verifyWrite": true,
-    "telemetry": false
+    "telemetry": false,
+    "silentSelfUpdate": true
   },
   "batch": {
     "studentPrefix": "CS-",
     "firstDevice": 1,
+    "lastDevice": 14,
     "padding": 2,
-    "controllerHostname": "LGCSCONT"
+    "controllerHostname": "LGCSCONT",
+    "autoAdvanceAfterSuccessfulWrite": true
   },
   "repository": {
-    "manifest": "os-list/lghs-os-list.json"
+    "manifest": "https://raw.githubusercontent.com/caden4314/LGHS-Imager/main/os-list/lghs-os-list.json"
+  },
+  "updater": {
+    "enabled": true,
+    "githubRepository": "caden4314/LGHS-Imager",
+    "releaseAsset": "LGHS-Imager-Setup-x64.exe",
+    "checksumAsset": "LGHS-Imager-Setup-x64.exe.sha256",
+    "silentInstallerArguments": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS"
   }
 }
