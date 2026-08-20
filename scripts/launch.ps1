@@ -128,7 +128,7 @@ try {
 '@
     if (-not $appText.Contains($oldBootstrap)) { throw 'Could not patch stock bootstrap block in LGHS Imager v4.' }
     $appText = $appText.Replace($oldBootstrap,$newBootstrap)
-    $appText = $appText.Replace("if($source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if($source.StockBootstrap){Append-Log 'Cloud-init starts LGHS stage 2 during a normal boot. LGHS-System installation retries when network becomes available.'}")
+    $appText = $appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'Cloud-init starts LGHS stage 2 during a normal boot. LGHS-System installation retries when network becomes available.'}")
     $appText = $appText.Replace('}finally{if($firstRunPath){Remove-Item $firstRunPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}','}finally{if($cloudInitPath){Remove-Item $cloudInitPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}')
     $appText = $appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with cloud-init provisioning; firstrun/systemd.run is not used.'")
 
