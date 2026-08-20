@@ -67,7 +67,7 @@ function Refresh-Drives {
     $DriveBox.Items.Clear()
     foreach ($d in Get-RemovableDisks) {
         $item = New-Object System.Windows.Controls.ComboBoxItem
-        $item.Content = "Disk $($d.Number)  •  $($d.FriendlyName)  •  $(Format-Bytes $d.Size)"
+        $item.Content = "Disk $($d.Number) | $($d.FriendlyName) | $(Format-Bytes $d.Size)"
         $item.Tag = $d.Number
         [void]$DriveBox.Items.Add($item)
     }
@@ -125,11 +125,11 @@ function Set-Mode([string]$mode) {
     $ControlButton.IsChecked = ($mode -eq 'controller')
     $LocalButton.IsChecked = ($mode -eq 'local')
     if ($mode -eq 'student') {
-        $TargetLabel.Text = "Next device: $(Get-TargetId)  •  Batch $($Config.batch.firstDevice)-$($Config.batch.lastDevice)"
-        $ImageLabel.Text = 'LGHS Student • Raspberry Pi 5 8GB'
+        $TargetLabel.Text = "Next device: $(Get-TargetId) | Batch $($Config.batch.firstDevice)-$($Config.batch.lastDevice)"
+        $ImageLabel.Text = 'LGHS Student | Raspberry Pi 5 8GB'
     } elseif ($mode -eq 'controller') {
         $TargetLabel.Text = "Controller hostname: $($Config.batch.controllerHostname)"
-        $ImageLabel.Text = 'LGHS Control • Raspberry Pi 5 8GB'
+        $ImageLabel.Text = 'LGHS Control | Raspberry Pi 5 8GB'
     } else {
         $TargetLabel.Text = "Provision as: $(Get-TargetId)"
         $ImageLabel.Text = if ($script:LocalImage) { $script:LocalImage } else { 'Choose a local .img/.zip/.xz file' }
@@ -151,6 +151,12 @@ function Set-Busy([bool]$busy) {
     $Progress.IsIndeterminate = $busy
 }
 
+function Quote-ProcessArgument([string]$value) {
+    if ($null -eq $value) { return '""' }
+    if ($value -notmatch '[\s"]') { return $value }
+    return '"' + ($value -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+}
+
 function Start-Flash {
     if ($script:Busy) { return }
     if (-not $DriveBox.SelectedItem) { [System.Windows.MessageBox]::Show('Insert and select an SD card first.','LGHS Imager'); return }
@@ -169,6 +175,10 @@ function Start-Flash {
         if (-not $entry) { [System.Windows.MessageBox]::Show("No $role image is available in the LGHS manifest.",'LGHS Imager'); return }
         $image = [string]$entry.url
         $sha = [string]$entry.extract_sha256
+        if ([string]::IsNullOrWhiteSpace($image)) {
+            [System.Windows.MessageBox]::Show("The $role image has not been published yet. Use Local Image for testing.",'LGHS Imager') | Out-Null
+            return
+        }
     }
 
     $confirm = [System.Windows.MessageBox]::Show(
@@ -184,9 +194,9 @@ function Start-Flash {
 
     try {
         $backend = Find-ImagerBackend
-        $args = @('--cli','--disable-telemetry')
-        if ($sha) { $args += @('--sha256',$sha) }
-        $args += @($image, "\\.\PhysicalDrive$diskNumber")
+        $backendArgs = @('--cli','--disable-telemetry')
+        if ($sha) { $backendArgs += @('--sha256',$sha) }
+        $backendArgs += @($image, "\\.\PhysicalDrive$diskNumber")
 
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $backend
@@ -194,7 +204,7 @@ function Start-Flash {
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.CreateNoWindow = $true
-        foreach ($arg in $args) { [void]$psi.ArgumentList.Add($arg) }
+        $psi.Arguments = (($backendArgs | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
 
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $psi
@@ -212,7 +222,7 @@ function Start-Flash {
         $StatusText.Text = 'Writing provisioning data...'
         Write-ProvisionFile $diskNumber $deviceId $role
         Append-Log "Provisioned $deviceId successfully."
-        $StatusText.Text = "$deviceId complete — safe to remove the card."
+        $StatusText.Text = "$deviceId complete - safe to remove the card."
 
         if ($script:Mode -eq 'student' -and $Config.batch.autoAdvanceAfterSuccessfulWrite) {
             if ($script:StudentNumber -lt [int]$Config.batch.lastDevice) {
@@ -243,7 +253,7 @@ function Start-Flash {
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel Grid.Row="0" Margin="0,0,0,18">
       <TextBlock Text="LGHS IMAGER" FontSize="30" FontWeight="Bold" Foreground="White"/>
-      <TextBlock Text="Raspberry Pi 5 • 8 GB • ARM64 classroom deployment" FontSize="14" Foreground="#A9B1BD" Margin="0,4,0,0"/>
+      <TextBlock Text="Raspberry Pi 5 | 8 GB | ARM64 classroom deployment" FontSize="14" Foreground="#A9B1BD" Margin="0,4,0,0"/>
     </StackPanel>
     <Grid Grid.Row="1" Margin="0,0,0,16">
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -256,7 +266,7 @@ function Start-Flash {
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock Grid.Row="0" Grid.Column="0" Text="Image" Foreground="#8993A1" VerticalAlignment="Center"/>
-        <TextBlock x:Name="ImageLabel" Grid.Row="0" Grid.Column="1" Text="LGHS Student • Raspberry Pi 5 8GB" Foreground="White" FontWeight="SemiBold"/>
+        <TextBlock x:Name="ImageLabel" Grid.Row="0" Grid.Column="1" Text="LGHS Student | Raspberry Pi 5 8GB" Foreground="White" FontWeight="SemiBold"/>
         <TextBlock Grid.Row="1" Grid.Column="0" Text="Target" Foreground="#8993A1" Margin="0,12,0,0"/>
         <TextBlock x:Name="TargetLabel" Grid.Row="1" Grid.Column="1" Foreground="White" Margin="0,12,0,0"/>
         <TextBlock Grid.Row="2" Grid.Column="0" Text="Storage" Foreground="#8993A1" Margin="0,12,0,0" VerticalAlignment="Center"/>
@@ -274,7 +284,7 @@ function Start-Flash {
     </Grid>
     <Grid Grid.Row="4" Margin="0,18,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <TextBlock Grid.Column="0" Text="SHA-256 + post-write verification enabled • telemetry disabled" Foreground="#7F8997" VerticalAlignment="Center"/>
+      <TextBlock Grid.Column="0" Text="SHA-256 + post-write verification enabled | telemetry disabled" Foreground="#7F8997" VerticalAlignment="Center"/>
       <Button x:Name="WriteButton" Grid.Column="1" Content="WRITE SD CARD" FontWeight="Bold" Padding="26,12"/>
     </Grid>
   </Grid>
