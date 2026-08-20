@@ -35,11 +35,21 @@ jobs:
         shell: powershell
         run: |
           choco install -y cmake ninja innosetup
+          if ($LASTEXITCODE -notin @(0, 1641, 3010)) {
+            throw "Chocolatey returned exit code $LASTEXITCODE"
+          }
+
           cmake --version
+          if ($LASTEXITCODE -ne 0) { throw 'cmake --version failed' }
+
           ninja --version
+          if ($LASTEXITCODE -ne 0) { throw 'ninja --version failed' }
+
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found at $iscc" }
-          & $iscc /?
+          $isccInfo = (Get-Item $iscc).VersionInfo
+          Write-Host "Inno Setup compiler: $iscc"
+          Write-Host "Inno Setup version: $($isccInfo.FileVersion)"
 
       - name: Install Qt 6.11.1 and MinGW 13.1
         uses: jurplel/install-qt-action@v4.2.0
@@ -90,7 +100,9 @@ jobs:
           if (-not (Test-Path $windeployqt)) { throw "windeployqt.exe not found at $windeployqt" }
 
           & $gcc --version
+          if ($LASTEXITCODE -ne 0) { throw 'gcc --version failed' }
           & $qmake -v
+          if ($LASTEXITCODE -ne 0) { throw 'qmake -v failed' }
 
           "qt=$qt" >> $env:GITHUB_OUTPUT
           "mingw=$mingw" >> $env:GITHUB_OUTPUT
