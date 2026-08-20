@@ -1,9 +1,10 @@
 #ifndef SourceRoot
   #define SourceRoot "..\package"
 #endif
-
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
 #define AppName "LGHS Imager"
-#define AppVersion ReadIni(SourceRoot + "\VERSION", "", "", "0.1.0")
 
 [Setup]
 AppId={{F0282D9D-CA34-4A5C-AB7E-940A8EA7074B}
