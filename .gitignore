@@ -11,3 +11,4 @@ build/
 *.img.gz
 secrets/
 config/local.json
+app/LGHS-Imager-runtime.ps1
