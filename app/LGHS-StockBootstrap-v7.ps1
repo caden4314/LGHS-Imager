@@ -1,20 +1,27 @@
 $ErrorActionPreference = 'Stop'
 
-# Build on the Trixie/cloud-init path, but use Raspberry Pi OS's own
-# /usr/bin/cancel-rename helper for first-boot handoff and prevent the graphical
-# wizard shell from racing LGHS provisioning.
+# Build on the Trixie/cloud-init path, but explicitly claim Raspberry Pi OS's
+# distro default user through cloud-init's singular `user:` stanza. Current
+# Raspberry Pi Imager uses this pattern so the default account is renamed and
+# keeps the distro's normal desktop groups/settings.
 . (Join-Path $PSScriptRoot 'LGHS-StockBootstrap-v5.ps1')
 
-function New-LghsCloudInitUserData {
-    @'
+function New-LghsCloudInitUserData([string]$Role) {
+    $target = if ($Role -eq 'controller') { 'cs_admin' } else { 'lg_cs_cont' }
+
+    $yaml = @'
 #cloud-config
 # LGHS Imager provisioning for Raspberry Pi OS Trixie.
-# Keep the graphical desktop out of the way until LGHS owns the machine.
+# LGHS owns first boot and names the distro default desktop user here.
+user:
+  name: __LGHS_PRIMARY_USER__
+  shell: /bin/bash
+  lock_passwd: false
+
 bootcmd:
   - [ /usr/bin/systemctl, mask, userconfig.service ]
   - [ /usr/bin/systemctl, mask, display-manager.service ]
   - [ /bin/rm, -f, /etc/xdg/autostart/piwiz.desktop ]
-  - [ /usr/bin/systemctl, stop, display-manager.service ]
 
 write_files:
   - path: /usr/local/sbin/lghs-finish-firstboot
@@ -22,25 +29,24 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
-      role="$(cat /etc/lghs/role)"
+      set -u
+      role="$(cat /etc/lghs/role 2>/dev/null || true)"
       target=lg_cs_cont
       [ "$role" = controller ] && target=cs_admin
 
       id "$target" >/dev/null 2>&1 || { echo "LGHS target user missing: $target" >&2; exit 1; }
+      rm -f /etc/xdg/autostart/piwiz.desktop
 
-      # Use Raspberry Pi OS's supported first-user handoff instead of manually
-      # reproducing its internal setup-wizard state transitions.
+      # Raspberry Pi OS ships this helper specifically to finish the first-user
+      # rename/setup path cleanly. Prefer it over duplicating its internals.
       if [ -x /usr/bin/cancel-rename ]; then
-        /usr/bin/cancel-rename "$target"
+        /usr/bin/cancel-rename "$target" >/var/log/lghs-cancel-rename.log 2>&1 || true
       else
-        rm -f /etc/xdg/autostart/piwiz.desktop
         systemctl disable userconfig.service >/dev/null 2>&1 || true
         systemctl enable getty@tty1.service >/dev/null 2>&1 || true
         rm -f /etc/ssh/sshd_config.d/rename_user.conf
       fi
 
-      # Ensure LGHS selects the correct graphical autologin account.
       if command -v raspi-config >/dev/null 2>&1; then
         SUDO_USER="$target" raspi-config nonint do_boot_behaviour B4 >/dev/null 2>&1 || true
       fi
@@ -87,4 +93,6 @@ power_state:
 
 final_message: "LGHS first boot complete"
 '@
+
+    return $yaml.Replace('__LGHS_PRIMARY_USER__',$target)
 }
