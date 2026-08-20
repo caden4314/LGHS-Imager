@@ -85,7 +85,7 @@ try {
     }
 
     $SourceApp = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
-    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v3.ps1'
+    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v4.ps1'
     if (-not (Test-Path $SourceApp)) { throw "Application script not found: $SourceApp" }
     if (-not (Test-Path $HelperScript)) { throw "Bootstrap helper not found: $HelperScript" }
     Assert-PowerShellSyntax $SourceApp
@@ -107,14 +107,13 @@ try {
 
     Set-LghsDirectEthernet
 
-    # Keep the stable v4 UI, but bind it to the fixed v3 bootstrap helper at runtime.
-    # The runtime copy lives beside the original app so $PSScriptRoot remains correct.
+    # Keep the stable v4 UI while binding it to the safe two-stage bootstrap.
     $RuntimeScript = Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
     $appText = Get-Content $SourceApp -Raw
-    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v3.ps1')
+    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v4.ps1')
     [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
     Assert-PowerShellSyntax $RuntimeScript
-    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; fixed bootstrap v3 selected.'
+    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; two-stage bootstrap v4 selected.'
 
     Write-LaunchLog 'Launching LGHS Imager.'
     & $RuntimeScript -SkipUpdate
