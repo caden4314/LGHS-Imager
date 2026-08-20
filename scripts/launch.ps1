@@ -10,8 +10,7 @@ function Write-LaunchLog([string]$Message) {
 }
 
 function Assert-PowerShellSyntax([string]$Path) {
-    $tokens = $null
-    $errors = $null
+    $tokens = $null; $errors = $null
     [void][System.Management.Automation.Language.Parser]::ParseFile($Path,[ref]$tokens,[ref]$errors)
     if ($errors.Count -gt 0) {
         $detail = ($errors | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" }) -join "`n"
@@ -21,31 +20,15 @@ function Assert-PowerShellSyntax([string]$Path) {
 
 function Set-LghsDirectEthernet {
     try {
-        $adapters = @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object {
-            $_.Status -eq 'Up' -and $_.InterfaceDescription -match '(?i)(USB.*(GbE|Ethernet)|Realtek USB GbE)'
-        })
-        if ($adapters.Count -eq 0) {
-            $fallback = Get-NetAdapter -Name 'Ethernet' -ErrorAction SilentlyContinue
-            if ($fallback -and $fallback.Status -eq 'Up') { $adapters = @($fallback) }
-        }
+        $adapters = @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match '(?i)(USB.*(GbE|Ethernet)|Realtek USB GbE)' })
+        if ($adapters.Count -eq 0) { $fallback=Get-NetAdapter -Name 'Ethernet' -ErrorAction SilentlyContinue; if($fallback -and $fallback.Status-eq'Up'){$adapters=@($fallback)} }
         if ($adapters.Count -eq 0) { Write-LaunchLog 'Direct Ethernet: no active USB/wired adapter found; skipped.'; return }
-
-        $adapter = $null
-        foreach ($candidate in $adapters) {
-            $cfg = Get-NetIPConfiguration -InterfaceIndex $candidate.ifIndex -ErrorAction SilentlyContinue
-            if (-not $cfg.IPv4DefaultGateway) { $adapter = $candidate; break }
-        }
-        if (-not $adapter) { Write-LaunchLog 'Direct Ethernet: all candidate wired adapters have an IPv4 gateway; refusing to alter an Internet-facing connection.'; return }
-
-        $ifIndex = [int]$adapter.ifIndex
-        $desired = Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -IPAddress '192.168.50.1' -ErrorAction SilentlyContinue
-        if (-not $desired) {
-            Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.IPAddress -like '169.254.*' -or $_.IPAddress -like '192.168.50.*' } |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Set-NetIPInterface -InterfaceIndex $ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction SilentlyContinue
-            New-NetIPAddress -InterfaceIndex $ifIndex -IPAddress '192.168.50.1' -PrefixLength 24 -AddressFamily IPv4 -ErrorAction Stop | Out-Null
-        }
+        $adapter=$null
+        foreach($candidate in $adapters){$cfg=Get-NetIPConfiguration -InterfaceIndex $candidate.ifIndex -ErrorAction SilentlyContinue;if(-not$cfg.IPv4DefaultGateway){$adapter=$candidate;break}}
+        if(-not$adapter){Write-LaunchLog 'Direct Ethernet: all candidate wired adapters have an IPv4 gateway; refusing to alter an Internet-facing connection.';return}
+        $ifIndex=[int]$adapter.ifIndex
+        $desired=Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -IPAddress '192.168.50.1' -ErrorAction SilentlyContinue
+        if(-not$desired){Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue|Where-Object{$_.IPAddress-like'169.254.*'-or$_.IPAddress-like'192.168.50.*'}|Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue;Set-NetIPInterface -InterfaceIndex $ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction SilentlyContinue;New-NetIPAddress -InterfaceIndex $ifIndex -IPAddress '192.168.50.1' -PrefixLength 24 -AddressFamily IPv4 -ErrorAction Stop|Out-Null}
         Set-NetConnectionProfile -InterfaceIndex $ifIndex -NetworkCategory Private -ErrorAction SilentlyContinue
         Write-LaunchLog "Direct Ethernet ready: $($adapter.Name) / $($adapter.InterfaceDescription) = 192.168.50.1/24 (no gateway)."
     } catch { Write-LaunchLog "Direct Ethernet setup warning: $($_.Exception.Message)" }
@@ -53,80 +36,46 @@ function Set-LghsDirectEthernet {
 
 Write-LaunchLog "Starting LGHS Imager from $Root"
 Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME"
-$RuntimeScript = $null
-
+$RuntimeScript=$null
 try {
-    if (Test-Path (Join-Path $Root '.git')) {
-        try {
-            $dirty = git -C $Root status --porcelain
-            if (-not $dirty) {
-                Write-LaunchLog 'Checking GitHub main for source-tree updates.'
-                git -C $Root fetch origin main --quiet
-                $local = (git -C $Root rev-parse HEAD).Trim(); $remote = (git -C $Root rev-parse origin/main).Trim()
-                if ($local -ne $remote) { Write-LaunchLog "Updating source checkout $local -> $remote"; git -C $Root pull --ff-only origin main --quiet }
-            } else { Write-LaunchLog 'Source checkout is dirty; automatic git update skipped.' }
-        } catch { Write-LaunchLog "Source update check failed: $($_.Exception.Message)" }
-    }
+    if(Test-Path(Join-Path $Root '.git')){try{$dirty=git -C $Root status --porcelain;if(-not$dirty){Write-LaunchLog 'Checking GitHub main for source-tree updates.';git -C $Root fetch origin main --quiet;$local=(git -C $Root rev-parse HEAD).Trim();$remote=(git -C $Root rev-parse origin/main).Trim();if($local-ne$remote){Write-LaunchLog "Updating source checkout $local -> $remote";git -C $Root pull --ff-only origin main --quiet}}else{Write-LaunchLog 'Source checkout is dirty; automatic git update skipped.'}}catch{Write-LaunchLog "Source update check failed: $($_.Exception.Message)"}}
 
-    $SourceApp = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
-    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v7.ps1'
-    if (-not (Test-Path $SourceApp)) { throw "Application script not found: $SourceApp" }
-    if (-not (Test-Path $HelperScript)) { throw "Bootstrap helper not found: $HelperScript" }
-    Assert-PowerShellSyntax $SourceApp; Assert-PowerShellSyntax $HelperScript
+    $SourceApp=Join-Path $Root 'app\LGHS-Imager-v4.ps1'
+    $HelperScript=Join-Path $Root 'app\LGHS-StockBootstrap-v8.ps1'
+    if(-not(Test-Path $SourceApp)){throw "Application script not found: $SourceApp"}
+    if(-not(Test-Path $HelperScript)){throw "Bootstrap helper not found: $HelperScript"}
+    Assert-PowerShellSyntax $SourceApp;Assert-PowerShellSyntax $HelperScript
 
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    Write-LaunchLog "Elevated=$isAdmin"
-    if (-not $isAdmin) {
-        Write-LaunchLog 'Requesting elevation through UAC.'
-        $Self = $MyInvocation.MyCommand.Path
-        $argLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $Self
-        $proc = Start-Process powershell.exe -Verb RunAs -ArgumentList $argLine -PassThru
-        Write-LaunchLog "Elevated wrapper started, PID=$($proc.Id)"
-        exit 0
-    }
+    $identity=[Security.Principal.WindowsIdentity]::GetCurrent();$principal=New-Object Security.Principal.WindowsPrincipal($identity);$isAdmin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);Write-LaunchLog "Elevated=$isAdmin"
+    if(-not$isAdmin){Write-LaunchLog 'Requesting elevation through UAC.';$Self=$MyInvocation.MyCommand.Path;$argLine='-NoProfile -ExecutionPolicy Bypass -File "{0}"'-f$Self;$proc=Start-Process powershell.exe -Verb RunAs -ArgumentList $argLine -PassThru;Write-LaunchLog "Elevated wrapper started, PID=$($proc.Id)";exit 0}
 
     Set-LghsDirectEthernet
+    $RuntimeScript=Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
+    $appText=Get-Content $SourceApp -Raw
+    $appText=$appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v8.ps1')
+    $appText=$appText.Replace('$credentials=$null;$firstRunPath=$null','$credentials=$null;$cloudInitPath=$null')
+    $appText=$appText.Replace("Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS first-run bootstrap.'","Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS-managed cloud-init provisioning and mandatory SSH recovery.'")
 
-    $RuntimeScript = Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
-    $appText = Get-Content $SourceApp -Raw
-    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v7.ps1')
-    $appText = $appText.Replace('$credentials=$null;$firstRunPath=$null','$credentials=$null;$cloudInitPath=$null')
-    $appText = $appText.Replace("Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS first-run bootstrap.'","Append-Log 'No published LGHS image found. Using official Raspberry Pi OS arm64 with LGHS-managed cloud-init provisioning.'")
-
-    $oldBootstrap = @'
+    $oldBootstrap=@'
             $firstRunPath=Join-Path $env:TEMP ("lghs-firstrun-{0}.sh" -f [Guid]::NewGuid().ToString('N'))
             [IO.File]::WriteAllText($firstRunPath,(New-LghsStockBootstrapScript $Config),[Text.UTF8Encoding]::new($false))
             $cliArgs+=@('--first-run-script',$firstRunPath);Append-Log 'LGHS stock first-run bootstrap attached.'
 '@
-    $newBootstrap = @'
+    $newBootstrap=@'
             $cloudInitPath=Join-Path $env:TEMP ("lghs-cloudinit-{0}.yaml" -f [Guid]::NewGuid().ToString('N'))
             [IO.File]::WriteAllText($cloudInitPath,(New-LghsCloudInitUserData $role),[Text.UTF8Encoding]::new($false))
-            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log "LGHS cloud-init attached; primary Trixie user = $(if($role-eq'controller'){'cs_admin'}else{'lg_cs_cont'})."
+            $cliArgs+=@('--cloudinit-userdata',$cloudInitPath);Append-Log "LGHS cloud-init attached; SSH recovery is enabled before stage 2; primary user = $(if($role-eq'controller'){'cs_admin'}else{'lg_cs_cont'})."
 '@
-    if (-not $appText.Contains($oldBootstrap)) { throw 'Could not patch stock bootstrap block in LGHS Imager v4.' }
-    $appText = $appText.Replace($oldBootstrap,$newBootstrap)
-    $appText = $appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'Cloud-init claims the Raspberry Pi OS default user for LGHS before graphical login, then stage 2 completes provisioning and reboots once.'}")
-    $appText = $appText.Replace('}finally{if($firstRunPath){Remove-Item $firstRunPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}','}finally{if($cloudInitPath){Remove-Item $cloudInitPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}')
-    $appText = $appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Missing LGHS images use Trixie cloud-init with an LGHS-owned primary desktop user.'")
-
-    if ($appText -match '--first-run-script|lghs-firstrun') { throw 'Safety check failed: legacy first-run injection is still present in the runtime.' }
-    if ($appText -notmatch '--cloudinit-userdata') { throw 'Safety check failed: cloud-init injection was not installed in the runtime.' }
-
-    [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
-    Assert-PowerShellSyntax $RuntimeScript
-    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; Trixie primary-user cloud-init v7 selected.'
-    Write-LaunchLog 'Launching LGHS Imager.'
+    if(-not$appText.Contains($oldBootstrap)){throw 'Could not patch stock bootstrap block in LGHS Imager v4.'}
+    $appText=$appText.Replace($oldBootstrap,$newBootstrap)
+    $appText=$appText.Replace("if(`$source.StockBootstrap){Append-Log 'First boot applies accounts/passwords/SSH locally. LGHS-System installation retries automatically when network becomes available.'}","if(`$source.StockBootstrap){Append-Log 'SSH is enabled independently before LGHS stage 2; stage 2 then completes accounts, networking and desktop provisioning.'}")
+    $appText=$appText.Replace('}finally{if($firstRunPath){Remove-Item $firstRunPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}','}finally{if($cloudInitPath){Remove-Item $cloudInitPath -Force -ErrorAction SilentlyContinue};Set-Busy $false}')
+    $appText=$appText.Replace("Append-Log 'Missing LGHS images use stock Raspberry Pi OS ARM64 with an injected LGHS first-run bootstrap.'","Append-Log 'Missing LGHS images use Trixie cloud-init; SSH recovery is mandatory and independent of stage 2.'")
+    if($appText-match'--first-run-script|lghs-firstrun'){throw 'Safety check failed: legacy first-run injection is still present in the runtime.'}
+    if($appText-notmatch'--cloudinit-userdata'){throw 'Safety check failed: cloud-init injection was not installed in the runtime.'}
+    [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false));Assert-PowerShellSyntax $RuntimeScript
+    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; mandatory-SSH bootstrap v8 selected.'
     & $RuntimeScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
-}
-catch {
-    $msg = $_ | Out-String; Write-LaunchLog "FATAL: $msg"
-    try {
-        Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue
-        [System.Windows.MessageBox]::Show("LGHS Imager could not start.`n`n$($_.Exception.Message)`n`nLog:`n$LogFile",'LGHS Imager startup error',[System.Windows.MessageBoxButton]::OK,[System.Windows.MessageBoxImage]::Error) | Out-Null
-    } catch { Write-Host $msg; Write-Host "Log: $LogFile" }
-    exit 1
-}
-finally { if ($RuntimeScript) { Remove-Item $RuntimeScript -Force -ErrorAction SilentlyContinue } }
+}catch{$msg=$_|Out-String;Write-LaunchLog "FATAL: $msg";try{Add-Type -AssemblyName PresentationFramework -ErrorAction SilentlyContinue;[System.Windows.MessageBox]::Show("LGHS Imager could not start.`n`n$($_.Exception.Message)`n`nLog:`n$LogFile",'LGHS Imager startup error',[System.Windows.MessageBoxButton]::OK,[System.Windows.MessageBoxImage]::Error)|Out-Null}catch{Write-Host $msg;Write-Host "Log: $LogFile"};exit 1}
+finally{if($RuntimeScript){Remove-Item $RuntimeScript -Force -ErrorAction SilentlyContinue}}
