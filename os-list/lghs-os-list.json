@@ -1,0 +1,28 @@
+{
+  "os_list": [
+    {
+      "name": "LGHS Student - Raspberry Pi 5 8GB",
+      "description": "LGHS CS2 student image for Raspberry Pi 5 8GB classroom systems.",
+      "icon": "",
+      "url": "",
+      "extract_size": 0,
+      "extract_sha256": "",
+      "image_download_size": 0,
+      "release_date": "2026-08-19",
+      "devices": ["pi5"],
+      "architecture": "arm64"
+    },
+    {
+      "name": "LGHS Control - Raspberry Pi 5 8GB",
+      "description": "LGHS fleet control image for Raspberry Pi 5 8GB.",
+      "icon": "",
+      "url": "",
+      "extract_size": 0,
+      "extract_sha256": "",
+      "image_download_size": 0,
+      "release_date": "2026-08-19",
+      "devices": ["pi5"],
+      "architecture": "arm64"
+    }
+  ]
+}
