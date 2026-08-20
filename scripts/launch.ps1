@@ -19,8 +19,49 @@ function Assert-PowerShellSyntax([string]$Path) {
     }
 }
 
+function Set-LghsDirectEthernet {
+    try {
+        $adapters = @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object {
+            $_.Status -eq 'Up' -and $_.InterfaceDescription -match '(?i)(USB.*(GbE|Ethernet)|Realtek USB GbE)'
+        })
+        if ($adapters.Count -eq 0) {
+            $fallback = Get-NetAdapter -Name 'Ethernet' -ErrorAction SilentlyContinue
+            if ($fallback -and $fallback.Status -eq 'Up') { $adapters = @($fallback) }
+        }
+        if ($adapters.Count -eq 0) {
+            Write-LaunchLog 'Direct Ethernet: no active USB/wired adapter found; skipped.'
+            return
+        }
+
+        $adapter = $null
+        foreach ($candidate in $adapters) {
+            $cfg = Get-NetIPConfiguration -InterfaceIndex $candidate.ifIndex -ErrorAction SilentlyContinue
+            if (-not $cfg.IPv4DefaultGateway) { $adapter = $candidate; break }
+        }
+        if (-not $adapter) {
+            Write-LaunchLog 'Direct Ethernet: all candidate wired adapters have an IPv4 gateway; refusing to alter an Internet-facing connection.'
+            return
+        }
+
+        $ifIndex = [int]$adapter.ifIndex
+        $desired = Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -IPAddress '192.168.50.1' -ErrorAction SilentlyContinue
+        if (-not $desired) {
+            Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.IPAddress -like '169.254.*' -or $_.IPAddress -like '192.168.50.*' } |
+                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+            Set-NetIPInterface -InterfaceIndex $ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction SilentlyContinue
+            New-NetIPAddress -InterfaceIndex $ifIndex -IPAddress '192.168.50.1' -PrefixLength 24 -AddressFamily IPv4 -ErrorAction Stop | Out-Null
+        }
+        Set-NetConnectionProfile -InterfaceIndex $ifIndex -NetworkCategory Private -ErrorAction SilentlyContinue
+        Write-LaunchLog "Direct Ethernet ready: $($adapter.Name) / $($adapter.InterfaceDescription) = 192.168.50.1/24 (no gateway)."
+    } catch {
+        Write-LaunchLog "Direct Ethernet setup warning: $($_.Exception.Message)"
+    }
+}
+
 Write-LaunchLog "Starting LGHS Imager from $Root"
 Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME"
+$RuntimeScript = $null
 
 try {
     if (Test-Path (Join-Path $Root '.git')) {
@@ -43,13 +84,12 @@ try {
         }
     }
 
-    $AppScript = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
-    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v2.ps1'
-    if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
+    $SourceApp = Join-Path $Root 'app\LGHS-Imager-v4.ps1'
+    $HelperScript = Join-Path $Root 'app\LGHS-StockBootstrap-v3.ps1'
+    if (-not (Test-Path $SourceApp)) { throw "Application script not found: $SourceApp" }
     if (-not (Test-Path $HelperScript)) { throw "Bootstrap helper not found: $HelperScript" }
-    Assert-PowerShellSyntax $AppScript
+    Assert-PowerShellSyntax $SourceApp
     Assert-PowerShellSyntax $HelperScript
-    Write-LaunchLog 'LGHS Imager v4 PowerShell syntax validation passed.'
 
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -65,8 +105,19 @@ try {
         exit 0
     }
 
-    Write-LaunchLog 'Launching LGHS Imager v4.'
-    & $AppScript -SkipUpdate
+    Set-LghsDirectEthernet
+
+    # Keep the stable v4 UI, but bind it to the fixed v3 bootstrap helper at runtime.
+    # The runtime copy lives beside the original app so $PSScriptRoot remains correct.
+    $RuntimeScript = Join-Path $Root 'app\LGHS-Imager-runtime.ps1'
+    $appText = Get-Content $SourceApp -Raw
+    $appText = $appText.Replace('LGHS-StockBootstrap-v2.ps1','LGHS-StockBootstrap-v3.ps1')
+    [IO.File]::WriteAllText($RuntimeScript,$appText,[Text.UTF8Encoding]::new($false))
+    Assert-PowerShellSyntax $RuntimeScript
+    Write-LaunchLog 'LGHS Imager runtime syntax validation passed; fixed bootstrap v3 selected.'
+
+    Write-LaunchLog 'Launching LGHS Imager.'
+    & $RuntimeScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
 }
 catch {
@@ -85,4 +136,7 @@ catch {
         Write-Host "Log: $LogFile"
     }
     exit 1
+}
+finally {
+    if ($RuntimeScript) { Remove-Item $RuntimeScript -Force -ErrorAction SilentlyContinue }
 }
