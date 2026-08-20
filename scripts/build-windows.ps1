@@ -16,19 +16,79 @@ $Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 if (-not (Test-Path (Join-Path $Upstream '.git'))) {
     & (Join-Path $PSScriptRoot 'bootstrap-upstream.ps1')
 }
-if (-not $QtRoot) { throw 'Set QT6_ROOT to your Qt 6 mingw_64 directory.' }
-if (-not $MingwRoot) { throw 'Set MINGW64_ROOT to your MinGW64 toolchain directory.' }
+
+function Find-QtRoot {
+    $candidates = @()
+    if ($env:QT6_ROOT) { $candidates += $env:QT6_ROOT }
+    if ($QtRoot) { $candidates += $QtRoot }
+    if (Test-Path 'C:\Qt') {
+        $candidates += Get-ChildItem 'C:\Qt' -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'mingw_64' }
+    }
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if ($candidate -and (Test-Path (Join-Path $candidate 'bin\windeployqt.exe'))) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+function Find-MingwRoot {
+    param([string]$Preferred)
+    $candidates = @()
+    if ($env:MINGW64_ROOT) { $candidates += $env:MINGW64_ROOT }
+    if ($Preferred) { $candidates += $Preferred }
+    if (Test-Path 'C:\Qt\Tools') {
+        $candidates += Get-ChildItem 'C:\Qt\Tools' -Directory -Filter 'mingw*_64' -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            ForEach-Object FullName
+    }
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if ($candidate -and (Test-Path (Join-Path $candidate 'bin\g++.exe'))) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+$QtRoot = Find-QtRoot
+$MingwRoot = Find-MingwRoot $MingwRoot
+
+if (-not $QtRoot -or -not $MingwRoot) {
+    Write-Host 'LGHS Imager build dependencies are not fully configured.' -ForegroundColor Yellow
+    Write-Host 'Running the Windows setup helper...'
+    & (Join-Path $PSScriptRoot 'setup-windows.ps1')
+    $QtRoot = Find-QtRoot
+    $MingwRoot = Find-MingwRoot $MingwRoot
+}
+
+if (-not $QtRoot) { throw 'Qt 6 MinGW kit was not found. Install Qt 6.11.1 mingw_64, then rerun the build.' }
+if (-not $MingwRoot) { throw 'MinGW64 compiler was not found under C:\Qt\Tools.' }
+
+$env:QT6_ROOT = $QtRoot
+$env:MINGW64_ROOT = $MingwRoot
+$env:Path = "$(Join-Path $MingwRoot 'bin');$(Join-Path $QtRoot 'bin');$env:Path"
+
+foreach ($tool in @('cmake','ninja','g++')) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "$tool is required but was not found after setup. Open a new PowerShell window and rerun the build."
+    }
+}
 
 Write-Host 'LGHS Imager Windows build'
 Write-Host "  Version:         $Version"
 Write-Host '  Target hardware: Raspberry Pi 5 8GB'
 Write-Host '  Host platform:   Windows x64'
 Write-Host "  Build type:      $BuildType"
+Write-Host "  Qt:              $QtRoot"
+Write-Host "  MinGW:           $MingwRoot"
 
 New-Item -ItemType Directory -Force -Path $Build | Out-Null
 cmake -S (Join-Path $Upstream 'src') -B $Build -G Ninja `
     "-DQt6_ROOT=$QtRoot" `
     "-DMINGW64_ROOT=$MingwRoot" `
+    "-DCMAKE_C_COMPILER=$(Join-Path $MingwRoot 'bin\gcc.exe')" `
+    "-DCMAKE_CXX_COMPILER=$(Join-Path $MingwRoot 'bin\g++.exe')" `
     "-DCMAKE_BUILD_TYPE=$BuildType"
 cmake --build $Build --parallel
 
