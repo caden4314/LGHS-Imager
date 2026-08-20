@@ -41,6 +41,7 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
     $ram = Select-LghsPi5RamProfile
     & $script:LghsV10WriteProvisioning $DriveRoot $DeviceId $Role $Credentials $Config $StockBootstrap
 
+    # Replace the legacy 8 GB metadata with the explicitly selected profile.
     $publicPath = Join-Path $DriveRoot 'lghs-provision.conf'
     if (Test-Path $publicPath) {
         $text = [IO.File]::ReadAllText($publicPath)
@@ -57,24 +58,6 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
         if (Test-Path $stage2Path) {
             $stage2 = [IO.File]::ReadAllText($stage2Path)
             $stage2 = $stage2.Replace('MEMORY_GB=8',"MEMORY_GB=$ram")
-
-            $marker = 'ARCH=arm64'
-            $check = @"
-ARCH=arm64
-ACTUAL_MEM_KB=`$(awk '/MemTotal:/ {print `$2}' /proc/meminfo 2>/dev/null || echo 0)
-if [[ "`$ACTUAL_MEM_KB" =~ ^[0-9]+`$ ]]; then
-  if (( ACTUAL_MEM_KB >= 6291456 )); then ACTUAL_PROFILE_GB=8; else ACTUAL_PROFILE_GB=4; fi
-  if [[ "`$ACTUAL_PROFILE_GB" != "$ram" ]]; then
-    echo "WARNING: Imager selected Raspberry Pi 5 $ram GB profile, but detected approximately `$ACTUAL_PROFILE_GB GB. Continuing for test use."
-  else
-    echo "Raspberry Pi 5 memory profile verified: $ram GB."
-  fi
-fi
-"@
-            $check = (Convert-LghsTextToLf $check).TrimEnd("`n")
-            if ($stage2.Contains($marker) -and -not $stage2.Contains('ACTUAL_MEM_KB=')) {
-                $stage2 = $stage2.Replace($marker,$check)
-            }
             [IO.File]::WriteAllText($stage2Path,(Convert-LghsTextToLf $stage2),[Text.UTF8Encoding]::new($false))
         }
     }
@@ -88,6 +71,8 @@ fi
         Convert-LghsFileToLf (Join-Path $DriveRoot $name)
     }
 
+    # Fail before card release if CR bytes survive in any critical Linux
+    # payload. This is the exact class of failure that broke the earlier flash.
     foreach ($name in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf')) {
         $path = Join-Path $DriveRoot $name
         if (Test-Path $path) {
