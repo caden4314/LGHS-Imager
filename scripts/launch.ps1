@@ -13,7 +13,6 @@ Write-LaunchLog "Starting LGHS Imager from $Root"
 Write-LaunchLog "PowerShell $($PSVersionTable.PSVersion) / user=$env:USERNAME"
 
 try {
-    # Development/source checkouts follow main automatically when they are clean.
     if (Test-Path (Join-Path $Root '.git')) {
         try {
             $dirty = git -C $Root status --porcelain
@@ -34,7 +33,6 @@ try {
         }
     }
 
-    # Installed builds silently check checksummed GitHub release assets.
     try {
         $Updater = Join-Path $Root 'updater\LGHS-Imager-Updater.ps1'
         if (Test-Path $Updater) {
@@ -59,10 +57,10 @@ try {
         exit 0
     }
 
-    $AppScript = Join-Path $Root 'app\LGHS-Imager.ps1'
+    $AppScript = Join-Path $Root 'app\LGHS-Imager-v2.ps1'
     if (-not (Test-Path $AppScript)) { throw "Application script not found: $AppScript" }
 
-    Write-LaunchLog 'Launching WPF application.'
+    Write-LaunchLog 'Launching redesigned WPF application.'
     & $AppScript -SkipUpdate
     Write-LaunchLog 'Application exited normally.'
 }
