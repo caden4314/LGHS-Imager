@@ -68,4 +68,9 @@ jobs:
           foreach ($needle in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf','lghs-controller-key.pub','lghs-controller-key')) {
             if ($v11 -notmatch [regex]::Escape($needle)) { throw "LF safety coverage missing: $needle" }
           }
+          . .\app\LGHS-StockBootstrap-v11.ps1
+          $cloud = New-LghsCloudInitUserData 'controller'
+          foreach ($needle in @('lghs-firstboot-progress-ui','lghs-firstboot-progress-launch','lghs-firstboot-progress.desktop','LGHS SETUP PROGRESS','ALL GOOD')) {
+            if ($cloud -notmatch [regex]::Escape($needle)) { throw "First-boot progress UI missing from active cloud-init: $needle" }
+          }
           if (-not $osList.os_list) { throw 'OS list contains no entries.' }
