@@ -11,13 +11,28 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Parse active PowerShell entrypoints
         shell: powershell
         run: |
           $files = @(
             'scripts\launch.ps1',
+            'scripts\build-windows.ps1',
+            'scripts\bootstrap-upstream.ps1',
+            'scripts\setup-windows.ps1',
+            'scripts\make-release-assets.ps1',
+            'updater\LGHS-Imager-Updater.ps1',
             'app\LGHS-Imager-v4.ps1',
-            'app\LGHS-StockBootstrap-v2.ps1'
+            'app\LGHS-StockBootstrap-v2.ps1',
+            'app\LGHS-StockBootstrap-v3.ps1',
+            'app\LGHS-StockBootstrap-v4.ps1',
+            'app\LGHS-StockBootstrap-v5.ps1',
+            'app\LGHS-StockBootstrap-v6.ps1',
+            'app\LGHS-StockBootstrap-v7.ps1',
+            'app\LGHS-StockBootstrap-v8.ps1',
+            'app\LGHS-StockBootstrap-v9.ps1',
+            'app\LGHS-StockBootstrap-v10.ps1',
+            'app\LGHS-StockBootstrap-v11.ps1'
           )
           $failed = $false
           foreach ($file in $files) {
@@ -33,3 +48,22 @@ jobs:
             }
           }
           if ($failed) { throw 'LGHS Imager PowerShell syntax validation failed.' }
+
+      - name: Validate JSON and active flash invariants
+        shell: powershell
+        run: |
+          $config = Get-Content 'config\lghs-imager.json' -Raw | ConvertFrom-Json
+          $osList = Get-Content 'os-list\lghs-os-list.json' -Raw | ConvertFrom-Json
+          if ($config.target.requiredMemoryGb -ne 4) { throw 'Pi 5 minimum RAM profile must be 4 GB.' }
+          $supported = @($config.target.supportedMemoryGb | ForEach-Object { [int]$_ } | Sort-Object)
+          if (($supported -join ',') -ne '4,8') { throw 'Supported Pi 5 RAM profiles must be exactly 4 and 8 GB.' }
+          $launch = Get-Content 'scripts\launch.ps1' -Raw
+          if ($launch -notmatch 'LGHS-StockBootstrap-v11\.ps1') { throw 'Launcher is not using bootstrap v11.' }
+          if ($launch -notmatch '--cloudinit-userdata') { throw 'Cloud-init injection is missing.' }
+          if ($launch -match '--first-run-script') { throw 'Legacy first-run-script injection returned.' }
+          if ($launch -notmatch 'LghsHardwareRamGb') { throw '4/8 GB pre-flash selector is missing.' }
+          $v11 = Get-Content 'app\LGHS-StockBootstrap-v11.ps1' -Raw
+          foreach ($needle in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf','lghs-controller-key.pub','lghs-controller-key')) {
+            if ($v11 -notmatch [regex]::Escape($needle)) { throw "LF safety coverage missing: $needle" }
+          }
+          if (-not $osList.os_list) { throw 'OS list contains no entries.' }
