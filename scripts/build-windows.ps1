@@ -77,7 +77,7 @@ foreach ($tool in @('cmake','ninja','g++')) {
 
 Write-Host 'LGHS Imager Windows build'
 Write-Host "  Version:         $Version"
-Write-Host '  Target hardware: Raspberry Pi 5 8GB'
+Write-Host '  Target hardware: Raspberry Pi 5 4GB / 8GB'
 Write-Host '  Host platform:   Windows x64'
 Write-Host "  Build type:      $BuildType"
 Write-Host "  Qt:              $QtRoot"
