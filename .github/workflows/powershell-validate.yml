@@ -57,10 +57,12 @@ jobs:
           if ($config.target.requiredMemoryGb -ne 4) { throw 'Pi 5 minimum RAM profile must be 4 GB.' }
           $supported = @($config.target.supportedMemoryGb | ForEach-Object { [int]$_ } | Sort-Object)
           if (($supported -join ',') -ne '4,8') { throw 'Supported Pi 5 RAM profiles must be exactly 4 and 8 GB.' }
+          if ([string]$config.repository.stockBaseImage -notmatch '^https://') { throw 'Stock image source must use HTTPS.' }
+          if ([string]$config.repository.bootstrapGitRepository -notmatch '^https://') { throw 'LGHS bootstrap repository must use HTTPS.' }
           $launch = Get-Content 'scripts\launch.ps1' -Raw
           if ($launch -notmatch 'LGHS-StockBootstrap-v11\.ps1') { throw 'Launcher is not using bootstrap v11.' }
-          if ($launch -notmatch '--cloudinit-userdata') { throw 'Cloud-init injection is missing.' }
-          if ($launch -match '--first-run-script') { throw 'Legacy first-run-script injection returned.' }
+          if ($launch -notmatch '--cloudinit-userdata') { throw 'Cloud-init replacement is missing.' }
+          if ($launch -notmatch 'Safety check failed: legacy first-run injection remains') { throw 'Post-patch legacy bootstrap safety check is missing.' }
           if ($launch -notmatch 'LghsHardwareRamGb') { throw '4/8 GB pre-flash selector is missing.' }
           $v11 = Get-Content 'app\LGHS-StockBootstrap-v11.ps1' -Raw
           foreach ($needle in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf','lghs-controller-key.pub','lghs-controller-key')) {
