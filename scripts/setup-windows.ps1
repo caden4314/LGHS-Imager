@@ -1,5 +1,5 @@
 param(
-    [string]$QtVersion = '6.11.1',
+    [string]$QtVersion = '6.9.3',
     [string]$QtBase = 'C:\Qt'
 )
 
@@ -34,9 +34,8 @@ $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
 $userPath = [Environment]::GetEnvironmentVariable('Path','User')
 $env:Path = "$machinePath;$userPath"
 
-# Qt is intentionally not fetched blindly from an arbitrary mirror. If a Qt
-# installation already exists, detect it. Otherwise provide the exact target
-# expected by the current Raspberry Pi Imager upstream.
+# Keep local builds aligned with the GitHub Actions toolchain. Current upstream
+# Raspberry Pi Imager requires Qt 6.9 or newer; LGHS standardizes on 6.9.3.
 $qtCandidates = @()
 if (Test-Path $QtBase) {
     $qtCandidates = Get-ChildItem $QtBase -Directory -ErrorAction SilentlyContinue |
@@ -48,7 +47,7 @@ if (Test-Path $QtBase) {
 if (-not $qtCandidates -or $qtCandidates.Count -eq 0) {
     Write-Host ''
     Write-Host 'Qt MinGW is not installed yet.' -ForegroundColor Yellow
-    Write-Host 'Install Qt 6.11.1 for Windows x64 with the MinGW 64-bit kit using the Qt Online Installer.'
+    Write-Host "Install Qt $QtVersion for Windows x64 with the MinGW 64-bit kit using the Qt Online Installer."
     Write-Host 'After installation, rerun this script or build-windows.ps1.'
     Write-Host ''
     Write-Host 'Expected layout:'
