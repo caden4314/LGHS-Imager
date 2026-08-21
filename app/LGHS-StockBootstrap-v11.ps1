@@ -21,6 +21,23 @@ function Convert-LghsFileToLf([string]$Path) {
 
 function New-LghsCloudInitUserData([string]$Role) {
     $raw = & $script:LghsV10CloudInit $Role
+
+    # If the desktop is already up but the Pi has not joined a network, report
+    # that state before interpreting the retrying online installer as active.
+    $needle = @'
+        elif pgrep -x dpkg >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1; then
+'@
+    $offline = @'
+        elif [ -n "$net" ] && [[ "$net" != connected* ]]; then
+          pct=30
+          phase='Waiting for Wi-Fi / Internet'
+          detail='Connect this Pi to the classroom network; setup will continue automatically.'
+        elif pgrep -x dpkg >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1; then
+'@
+    if ($raw.Contains($needle)) {
+        $raw = $raw.Replace($needle,$offline)
+    }
+
     return (Convert-LghsTextToLf $raw)
 }
 
