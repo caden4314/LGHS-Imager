@@ -101,11 +101,9 @@ write_files:
       [ -f "$MARK" ] && exit 0
 
       last_phase=""
-      spinner='|/-\\'
-      spin=0
 
       draw_bar() {
-        local pct="$1" filled empty bar
+        local pct="$1" filled empty bar rest
         filled=$((pct / 5)); empty=$((20 - filled))
         printf -v bar '%*s' "$filled" ''
         bar="${bar// /#}"
@@ -114,9 +112,18 @@ write_files:
       }
 
       send_notice() {
-        local title="$1" body="$2" urgency="${3:-normal}"
-        command -v notify-send >/dev/null 2>&1 || return 0
-        notify-send -a 'LGHS Setup' -u "$urgency" -t 10000 "$title" "$body" >/dev/null 2>&1 || true
+        local title="$1" body="$2" urgency="${3:-normal}" message
+        message="$title: $body"
+        if command -v wfpanelctl >/dev/null 2>&1; then
+          if [ "$urgency" = critical ]; then
+            wfpanelctl critical "$message" >/dev/null 2>&1 && return 0
+          else
+            wfpanelctl notify "$message" >/dev/null 2>&1 && return 0
+          fi
+        fi
+        if command -v notify-send >/dev/null 2>&1; then
+          notify-send -a 'LGHS Setup' -u "$urgency" -t 10000 "$title" "$body" >/dev/null 2>&1 || true
+        fi
       }
 
       while true; do
@@ -135,7 +142,7 @@ write_files:
           pct=100
           phase='ALL GOOD — LGHS setup complete'
           detail="$host is ready for classroom use."
-        elif [ "$online_state" = "failed" ] || [ "$online_result" = "failed" ]; then
+        elif [ "$online_state" = "failed" ] || { [ -n "$online_result" ] && [ "$online_result" != "success" ] && [ "$online_state" = "inactive" ]; }; then
           pct=35
           phase='Setup needs attention'
           detail='The online installer failed. LGHS will retry automatically; check Wi-Fi if this persists.'
@@ -188,7 +195,6 @@ write_files:
         fi
 
         if [ "$pct" -eq 100 ]; then
-          send_notice 'LGHS Setup Complete — All Good' "$detail" normal
           touch "$MARK"
           if [ "$NOTIFY_ONLY" -eq 0 ]; then
             printf '\n\033[1;32mREADY\033[0m — setup finished successfully.\n'
@@ -203,7 +209,6 @@ write_files:
         else
           sleep 2
         fi
-        spin=$(( (spin + 1) % 4 ))
       done
 
   - path: /usr/local/bin/lghs-firstboot-progress-launch
@@ -213,11 +218,11 @@ write_files:
       #!/bin/sh
       STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/lghs"
       [ -f "$STATE_DIR/install-success-shown" ] && exit 0
-      if command -v x-terminal-emulator >/dev/null 2>&1; then
-        exec x-terminal-emulator -T 'LGHS Setup Progress' -e /usr/local/bin/lghs-firstboot-progress-ui
-      fi
       if command -v lxterminal >/dev/null 2>&1; then
         exec lxterminal --title='LGHS Setup Progress' -e /usr/local/bin/lghs-firstboot-progress-ui
+      fi
+      if command -v x-terminal-emulator >/dev/null 2>&1; then
+        exec x-terminal-emulator -T 'LGHS Setup Progress' -e /usr/local/bin/lghs-firstboot-progress-ui
       fi
       if command -v xterm >/dev/null 2>&1; then
         exec xterm -T 'LGHS Setup Progress' -e /usr/local/bin/lghs-firstboot-progress-ui
