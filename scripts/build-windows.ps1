@@ -62,7 +62,7 @@ if (-not $QtRoot -or -not $MingwRoot) {
     $MingwRoot = Find-MingwRoot $MingwRoot
 }
 
-if (-not $QtRoot) { throw 'Qt 6 MinGW kit was not found. Install Qt 6.11.1 mingw_64, then rerun the build.' }
+if (-not $QtRoot) { throw 'Qt 6 MinGW kit was not found. Install Qt 6.9.3 mingw_64, then rerun the build.' }
 if (-not $MingwRoot) { throw 'MinGW64 compiler was not found under C:\Qt\Tools.' }
 
 $env:QT6_ROOT = $QtRoot
