@@ -20,6 +20,7 @@ The application is based on the open-source Raspberry Pi Imager codebase, but th
 - Deployment-specific Ed25519 fleet key generation
 - Cached Raspberry Pi OS download for repeat flashes
 - Batch flashing with automatic CS-01, CS-02, ... numbering
+- First-boot on-screen setup progress through ALL GOOD / ready state
 - Windows installer
 
 The Raspberry Pi Imager repository format identifies Raspberry Pi 5 with the `pi5` device identifier. RAM capacity cannot be reliably detected by the Windows SD-card writer before the card is booted, so the operator explicitly chooses 4 GB or 8 GB before each managed flash.
@@ -46,7 +47,7 @@ cd LGHS-Imager
 .\scripts\bootstrap-upstream.ps1
 ```
 
-The launcher can use an installed official Raspberry Pi Imager backend or a locally built backend. Missing published LGHS images currently fall back to official Raspberry Pi OS arm64 and attach the LGHS cloud-init/stage-2 provisioning path.
+The launcher can use an installed official Raspberry Pi Imager backend or a locally built backend. Missing published LGHS images currently fall back to official Raspberry Pi OS arm64 and attach the LGHS cloud-init/stage-2 provisioning path. That cloud-init path also stages an XDG desktop progress launcher before the long online software installation begins, so a first boot can visibly show waiting-for-network, download/install, configuration, and completion phases.
 
 ## Build
 
