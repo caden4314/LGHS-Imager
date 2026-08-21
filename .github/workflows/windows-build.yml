@@ -25,11 +25,18 @@ jobs:
         id: version
         shell: powershell
         run: |
-          $version = "0.1.${{ github.run_number }}"
+          $base = (Get-Content VERSION -Raw).Trim()
+          if ($base -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Repository VERSION must be MAJOR.MINOR.PATCH, got '$base'"
+          }
+          # Preserve the repository release line and append the Actions run as
+          # the fourth Windows version component. This keeps updater comparisons
+          # monotonic instead of resetting every build to the old 0.1.x line.
+          $version = "$base.${{ github.run_number }}"
           Set-Content -Path VERSION -Value $version -Encoding ascii
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
-          Write-Host "LGHS Imager build version: $version"
+          Write-Host "LGHS Imager build version: $version (base $base)"
 
       - name: Install build tools
         shell: powershell
@@ -38,13 +45,10 @@ jobs:
           if ($LASTEXITCODE -notin @(0, 1641, 3010)) {
             throw "Chocolatey returned exit code $LASTEXITCODE"
           }
-
           cmake --version
           if ($LASTEXITCODE -ne 0) { throw 'cmake --version failed' }
-
           ninja --version
           if ($LASTEXITCODE -ne 0) { throw 'ninja --version failed' }
-
           $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found at $iscc" }
           $isccInfo = (Get-Item $iscc).VersionInfo
@@ -71,7 +75,6 @@ jobs:
           Write-Host "QT_ROOT_DIR=$env:QT_ROOT_DIR"
           Write-Host "Qt6_DIR=$env:Qt6_DIR"
           Write-Host "IQTA_TOOLS=$env:IQTA_TOOLS"
-
           $qt = $env:QT_ROOT_DIR
           if (-not $qt -and $env:Qt6_DIR) {
             $qt = Split-Path -Parent (Split-Path -Parent $env:Qt6_DIR)
@@ -79,7 +82,6 @@ jobs:
           if (-not $qt -or -not (Test-Path $qt)) {
             throw "Qt root could not be located. QT_ROOT_DIR='$env:QT_ROOT_DIR' Qt6_DIR='$env:Qt6_DIR'"
           }
-
           $gccCmd = Get-Command gcc.exe -ErrorAction SilentlyContinue
           if (-not $gccCmd) {
             Write-Host 'PATH entries containing mingw:'
@@ -89,21 +91,17 @@ jobs:
             }
             throw 'MinGW gcc.exe was not found after Qt setup.'
           }
-
           $gcc = $gccCmd.Source
           $mingwBin = Split-Path -Parent $gcc
           $mingw = Split-Path -Parent $mingwBin
-
           $qmake = Join-Path $qt 'bin\qmake.exe'
           $windeployqt = Join-Path $qt 'bin\windeployqt.exe'
           if (-not (Test-Path $qmake)) { throw "qmake.exe not found at $qmake" }
           if (-not (Test-Path $windeployqt)) { throw "windeployqt.exe not found at $windeployqt" }
-
           & $gcc --version
           if ($LASTEXITCODE -ne 0) { throw 'gcc --version failed' }
           & $qmake -v
           if ($LASTEXITCODE -ne 0) { throw 'qmake -v failed' }
-
           "qt=$qt" >> $env:GITHUB_OUTPUT
           "mingw=$mingw" >> $env:GITHUB_OUTPUT
           Write-Host "Qt root:    $qt"
@@ -150,8 +148,8 @@ jobs:
         run: |
           $tag = '${{ steps.version.outputs.tag }}'
           gh release create $tag `
-            dist/LGHS-Imager-Setup-x64.exe `
-            dist/LGHS-Imager-Setup-x64.exe.sha256 `
+            dist\LGHS-Imager-Setup-x64.exe `
+            dist\LGHS-Imager-Setup-x64.exe.sha256 `
             --target '${{ github.sha }}' `
             --title "LGHS Imager $tag" `
             --generate-notes
