@@ -62,9 +62,9 @@ try {
     $student.release_date = (Get-Date).ToString('yyyy-MM-dd')
     [IO.File]::WriteAllText($osListPath,($osList | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
 
-    # Windows OpenSSH parses UserKnownHostsFile paths with spaces poorly when
-    # supplied through -o. ProgramData provides a stable path without the
-    # current user's profile name while preserving a dedicated LGHS host store.
+    # Keep the managed local path aligned with the production Cloudflare-only
+    # enrollment route. ProgramData avoids OpenSSH -o path parsing problems
+    # when the Windows profile name contains spaces.
     $v11 = $v11Original.Replace(
         '$known = Join-Path $env:LOCALAPPDATA ''LGHS-Imager\deployment\controller_known_hosts''',
         '$known = Join-Path $env:ProgramData ''LGHS-Imager\deployment\controller_known_hosts'''
@@ -72,6 +72,33 @@ try {
         "if ([string]::IsNullOrWhiteSpace(`$host)) { `$host = '192.168.50.2' }",
         "if ([string]::IsNullOrWhiteSpace(`$host)) { `$host = 'LGCSCONT-CF' }"
     )
+
+    # PowerShell variable names are case-insensitive and $Host is a built-in
+    # read-only automatic variable. The v11 enrollment helper historically used
+    # $host, which fails at runtime with "Cannot overwrite variable Host".
+    # Rewrite that local helper before launch until all installed copies have
+    # moved to the corrected controllerHost name.
+    $v11 = $v11.Replace(
+        '$host = [string]$Config.fleet.controllerHost',
+        '$controllerHost = [string]$Config.fleet.controllerHost'
+    ).Replace(
+        'if ([string]::IsNullOrWhiteSpace($host)) { $host = ''LGCSCONT-CF'' }',
+        'if ([string]::IsNullOrWhiteSpace($controllerHost)) { $controllerHost = ''LGCSCONT-CF'' }'
+    ).Replace(
+        '"$user@$host"',
+        '"$user@$controllerHost"'
+    ).Replace(
+        'at $host. $detail',
+        'at $controllerHost. $detail'
+    )
+
+    if ($v11 -match '(?m)^\s*\$host\s*=') {
+        throw 'Managed Student safety check failed: enrollment helper still assigns the reserved PowerShell $Host variable.'
+    }
+    if ($v11 -notmatch '\$controllerHost') {
+        throw 'Managed Student safety check failed: corrected controllerHost variable is missing.'
+    }
+
     [IO.File]::WriteAllText($v11Path,$v11,[Text.UTF8Encoding]::new($false))
 
     Write-Host ''
