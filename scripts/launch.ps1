@@ -55,7 +55,7 @@ try {
         exit 0
     }
 
-    Set-LghsDirectEthernet
+    Write-LaunchLog 'Direct Ethernet setup disabled; Fleet enrollment uses the configured Cloudflare SSH route.'
 
     $SourceApp=Join-Path $Root 'app\LGHS-Imager-v4.ps1'
     $HelperScript=Join-Path $Root 'app\LGHS-StockBootstrap-v11.ps1'
