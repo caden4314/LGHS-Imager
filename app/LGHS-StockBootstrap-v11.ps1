@@ -36,8 +36,8 @@ function Get-LghsSshClient {
 
 function Register-LghsFleetApiToken([string]$DeviceId,[string]$Token,$Config) {
     if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($Token)) { throw 'Fleet token enrollment requires a device ID and token.' }
-    $host = [string]$Config.fleet.controllerHost
-    if ([string]::IsNullOrWhiteSpace($host)) { $host = 'LGCSCONT-CF' }
+    $controllerHost = [string]$Config.fleet.controllerHost
+    if ([string]::IsNullOrWhiteSpace($controllerHost)) { $controllerHost = 'LGCSCONT-CF' }
     $user = [string]$Config.fleet.controllerUser
     if ([string]::IsNullOrWhiteSpace($user)) { $user = 'cs_admin' }
     $keys = Get-LghsFleetKeyPair $Config
@@ -54,7 +54,7 @@ function Register-LghsFleetApiToken([string]$DeviceId,[string]$Token,$Config) {
         '-o','StrictHostKeyChecking=accept-new',
         '-o','BatchMode=yes',
         '-o','ConnectTimeout=8',
-        "$user@$host",
+        "$user@$controllerHost",
         $remote
     )
     $output = @($Token | & $ssh @args 2>&1)
@@ -62,7 +62,7 @@ function Register-LghsFleetApiToken([string]$DeviceId,[string]$Token,$Config) {
     if ($exitCode -ne 0) {
         $detail = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
         if ($detail.Length -gt 700) { $detail = $detail.Substring($detail.Length-700) }
-        throw "LGCSCONT Fleet token enrollment failed for $DeviceId at $host. $detail"
+        throw "LGCSCONT Fleet token enrollment failed for $DeviceId at $controllerHost. $detail"
     }
     $joined = (($output | ForEach-Object { [string]$_ }) -join "`n")
     if ($joined -notmatch "ENROLLED\s+$([regex]::Escape($DeviceId))") {
@@ -90,8 +90,8 @@ function New-LghsCloudInitUserData([string]$Role) {
 
     # First boot accepts the verified backup payload if the primary filename is
     # unexpectedly unavailable.
-    $old = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/lghs-stage2.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
-    $new = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/firmware/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/lghs-stage2.sh; elif [ -f /boot/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/lghs-stage2-backup.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
+    $old = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
+    $new = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/firmware/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
     if (-not $raw.Contains($old)) { throw 'Could not harden cloud-init stage2 fallback path.' }
     $raw = $raw.Replace($old,$new)
 
