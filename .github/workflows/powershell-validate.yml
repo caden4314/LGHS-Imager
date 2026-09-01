@@ -59,9 +59,11 @@ jobs:
           if (($supported -join ',') -ne '4,8') { throw 'Supported Pi 5 RAM profiles must be exactly 4 and 8 GB.' }
           if ([string]$config.repository.stockBaseImage -notmatch '^https://') { throw 'Stock image source must use HTTPS.' }
           if ([string]$config.repository.bootstrapGitRepository -notmatch '^https://') { throw 'LGHS bootstrap repository must use HTTPS.' }
-          if ([string]$config.repository.bootstrapGitBranch -ne 'release-0.6.0-fleet-operations') { throw 'Zero-touch Imager must be pinned to the LGHS 0.6 branch.' }
+          if ([string]$config.repository.bootstrapGitBranch -ne 'main') { throw 'Zero-touch Imager must follow the merged LGHS-System main branch.' }
+          if ([string]$config.repository.manifest -notmatch '/main/os-list/lghs-os-list\.json$') { throw 'OS manifest must follow LGHS-Imager main.' }
           if ([bool]$config.features.stockImageBootstrapFallback) { throw 'Zero-touch Student imaging must not silently fall back to stock Raspberry Pi OS.' }
-          if ([string]$config.fleet.controllerHost -ne '192.168.50.2') { throw 'Controller enrollment host must use the dedicated management link.' }
+          if ([string]$config.fleet.controllerHost -ne 'LGCSCONT-CF') { throw 'Controller enrollment must use the configured Cloudflare SSH alias.' }
+          if ([string]$config.fleet.controllerHost -match '^192\.168\.50\.') { throw 'Zero-touch enrollment must not depend on the retired direct Ethernet management network.' }
           if ([string]$config.fleet.fleetApiUrl -notmatch '^https://') { throw 'Fleet API URL must use HTTPS.' }
           $launch = Get-Content 'scripts\launch.ps1' -Raw
           if ($launch -notmatch 'LGHS-StockBootstrap-v11\.ps1') { throw 'Launcher is not using bootstrap v11.' }
