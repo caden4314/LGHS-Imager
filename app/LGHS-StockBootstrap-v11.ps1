@@ -19,6 +19,58 @@ function Convert-LghsFileToLf([string]$Path) {
     [IO.File]::WriteAllText($Path,$text,[Text.UTF8Encoding]::new($false))
 }
 
+function New-LghsFleetApiToken {
+    $bytes = New-Object byte[] 48
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    return [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+}
+
+function Get-LghsSshClient {
+    $cmd = Get-Command ssh.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $candidate = Join-Path $env:WINDIR 'System32\OpenSSH\ssh.exe'
+    if (Test-Path $candidate) { return $candidate }
+    throw 'Windows OpenSSH Client is required for LGHS Fleet token enrollment.'
+}
+
+function Register-LghsFleetApiToken([string]$DeviceId,[string]$Token,$Config) {
+    if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($Token)) { throw 'Fleet token enrollment requires a device ID and token.' }
+    $host = [string]$Config.fleet.controllerHost
+    if ([string]::IsNullOrWhiteSpace($host)) { $host = '192.168.50.2' }
+    $user = [string]$Config.fleet.controllerUser
+    if ([string]::IsNullOrWhiteSpace($user)) { $user = 'cs_admin' }
+    $keys = Get-LghsFleetKeyPair $Config
+    $ssh = Get-LghsSshClient
+    $known = Join-Path $env:LOCALAPPDATA 'LGHS-Imager\deployment\controller_known_hosts'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $known) | Out-Null
+    if (-not (Test-Path $known)) { [IO.File]::WriteAllText($known,'',[Text.UTF8Encoding]::new($false)) }
+
+    $remote = "sudo -n /usr/bin/python3 /opt/lghs/repo/controller/lghs-imager-enroll $DeviceId"
+    $args = @(
+        '-i',$keys.Private,
+        '-o','IdentitiesOnly=yes',
+        '-o',"UserKnownHostsFile=$known",
+        '-o','StrictHostKeyChecking=accept-new',
+        '-o','BatchMode=yes',
+        '-o','ConnectTimeout=8',
+        "$user@$host",
+        $remote
+    )
+    $output = @($Token | & $ssh @args 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        $detail = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+        if ($detail.Length -gt 700) { $detail = $detail.Substring($detail.Length-700) }
+        throw "LGCSCONT Fleet token enrollment failed for $DeviceId at $host. $detail"
+    }
+    $joined = (($output | ForEach-Object { [string]$_ }) -join "`n")
+    if ($joined -notmatch "ENROLLED\s+$([regex]::Escape($DeviceId))") {
+        throw "LGCSCONT did not confirm Fleet token enrollment for $DeviceId."
+    }
+    if (Get-Command Append-Log -ErrorAction SilentlyContinue) { Append-Log "Fleet identity registered with LGCSCONT for $DeviceId." }
+}
+
 function New-LghsCloudInitUserData([string]$Role) {
     $raw = & $script:LghsV10CloudInit $Role
 
@@ -71,8 +123,33 @@ function Write-LghsProvisioning([string]$DriveRoot,[string]$DeviceId,[string]$Ro
         if ($Role -eq 'student') {
             if ($text -match '(?m)^DISPLAY_ID=') { $text = [regex]::Replace($text,'(?m)^DISPLAY_ID=.*$',"DISPLAY_ID=$DeviceId") }
             else { $text = $text.TrimEnd("`r","`n") + "`nDISPLAY_ID=$DeviceId`n" }
+            $fleetApiUrl = [string]$Config.fleet.fleetApiUrl
+            if ([string]::IsNullOrWhiteSpace($fleetApiUrl)) { $fleetApiUrl = 'https://fleet-api.scenicrouteservers.com' }
+            if ($fleetApiUrl -notmatch '^https://') { throw 'Fleet API URL must use HTTPS.' }
+            if ($text -match '(?m)^FLEET_API_URL=') { $text = [regex]::Replace($text,'(?m)^FLEET_API_URL=.*$',"FLEET_API_URL=$fleetApiUrl") }
+            else { $text = $text.TrimEnd("`r","`n") + "`nFLEET_API_URL=$fleetApiUrl`n" }
         }
         [IO.File]::WriteAllText($publicPath,(Convert-LghsTextToLf $text),[Text.UTF8Encoding]::new($false))
+    }
+
+    if ($Role -eq 'student') {
+        $secretPath = Join-Path $DriveRoot 'lghs-provision-secrets.conf'
+        if (-not (Test-Path $secretPath)) { throw 'Student provisioning secret file is missing.' }
+        $fleetToken = New-LghsFleetApiToken
+        $encodedToken = ConvertTo-LghsBase64Utf8 $fleetToken
+        $secretText = [IO.File]::ReadAllText($secretPath)
+        if ($secretText -match '(?m)^FLEET_API_TOKEN_B64=') { $secretText = [regex]::Replace($secretText,'(?m)^FLEET_API_TOKEN_B64=.*$',"FLEET_API_TOKEN_B64=$encodedToken") }
+        else { $secretText = $secretText.TrimEnd("`r","`n") + "`nFLEET_API_TOKEN_B64=$encodedToken`n" }
+        [IO.File]::WriteAllText($secretPath,(Convert-LghsTextToLf $secretText),[Text.UTF8Encoding]::new($false))
+
+        try {
+            $roundTrip = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedToken))
+            if (-not [string]::Equals($roundTrip,$fleetToken,[StringComparison]::Ordinal)) { throw 'Fleet token round-trip mismatch.' }
+            Register-LghsFleetApiToken $DeviceId $fleetToken $Config
+        } finally {
+            $fleetToken = $null
+            $roundTrip = $null
+        }
     }
 
     if ($StockBootstrap) {
