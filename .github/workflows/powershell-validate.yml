@@ -84,7 +84,9 @@ jobs:
           }
           if ($v11 -notmatch '\$env:ProgramData') { throw 'Fleet SSH known-hosts storage must use ProgramData for Windows paths with spaces.' }
           if ($v11 -match '192\.168\.50\.2') { throw 'Active Fleet enrollment helper must not retain the retired direct Ethernet fallback.' }
-          if ($v11 -notmatch "LGCSCONT-CF") { throw 'Active Fleet enrollment helper must default to the Cloudflare SSH alias.' }
+          if ($v11 -notmatch 'LGCSCONT-CF') { throw 'Active Fleet enrollment helper must default to the Cloudflare SSH alias.' }
+          if ($v11 -match '(?im)^\s*\$host\s*=') { throw 'Fleet enrollment helper must not assign the reserved PowerShell $Host automatic variable.' }
+          if ($v11 -notmatch '\$controllerHost') { throw 'Fleet enrollment helper must use the safe controllerHost variable.' }
           . .\app\LGHS-StockBootstrap-v11.ps1
           $token = New-LghsFleetApiToken
           if ($token.Length -lt 32 -or $token -match '\s') { throw 'Generated Fleet API token is invalid.' }
