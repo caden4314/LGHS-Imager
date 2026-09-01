@@ -37,12 +37,12 @@ function Get-LghsSshClient {
 function Register-LghsFleetApiToken([string]$DeviceId,[string]$Token,$Config) {
     if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($Token)) { throw 'Fleet token enrollment requires a device ID and token.' }
     $host = [string]$Config.fleet.controllerHost
-    if ([string]::IsNullOrWhiteSpace($host)) { $host = '192.168.50.2' }
+    if ([string]::IsNullOrWhiteSpace($host)) { $host = 'LGCSCONT-CF' }
     $user = [string]$Config.fleet.controllerUser
     if ([string]::IsNullOrWhiteSpace($user)) { $user = 'cs_admin' }
     $keys = Get-LghsFleetKeyPair $Config
     $ssh = Get-LghsSshClient
-    $known = Join-Path $env:LOCALAPPDATA 'LGHS-Imager\deployment\controller_known_hosts'
+    $known = Join-Path $env:ProgramData 'LGHS-Imager\deployment\controller_known_hosts'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $known) | Out-Null
     if (-not (Test-Path $known)) { [IO.File]::WriteAllText($known,'',[Text.UTF8Encoding]::new($false)) }
 
