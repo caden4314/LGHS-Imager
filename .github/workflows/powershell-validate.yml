@@ -17,6 +17,7 @@ jobs:
         run: |
           $files = @(
             'scripts\launch.ps1',
+            'scripts\launch-local-student.ps1',
             'scripts\build-windows.ps1',
             'scripts\bootstrap-upstream.ps1',
             'scripts\setup-windows.ps1',
@@ -70,6 +71,10 @@ jobs:
           if ($launch -notmatch '--cloudinit-userdata') { throw 'Cloud-init replacement is missing.' }
           if ($launch -notmatch 'Safety check failed: legacy first-run injection remains') { throw 'Post-patch legacy bootstrap safety check is missing.' }
           if ($launch -notmatch 'LghsHardwareRamGb') { throw '4/8 GB pre-flash selector is missing.' }
+          $managed = Get-Content 'scripts\launch-local-student.ps1' -Raw
+          foreach ($needle in @('ImagePath','Sha256','LGCSCONT-CF','Use STUDENT mode')) {
+            if ($managed -notmatch [regex]::Escape($needle)) { throw "Managed local Student image flow missing: $needle" }
+          }
           $v11 = Get-Content 'app\LGHS-StockBootstrap-v11.ps1' -Raw
           foreach ($needle in @('lghs-stage2.sh','lghs-provision.conf','lghs-provision-secrets.conf','lghs-controller-key.pub','lghs-controller-key')) {
             if ($v11 -notmatch [regex]::Escape($needle)) { throw "LF safety coverage missing: $needle" }
@@ -77,6 +82,9 @@ jobs:
           foreach ($needle in @('New-LghsFleetApiToken','FLEET_API_TOKEN_B64','FLEET_API_URL','lghs-imager-enroll','Register-LghsFleetApiToken')) {
             if ($v11 -notmatch [regex]::Escape($needle)) { throw "Zero-touch Fleet enrollment coverage missing: $needle" }
           }
+          if ($v11 -notmatch '\$env:ProgramData') { throw 'Fleet SSH known-hosts storage must use ProgramData for Windows paths with spaces.' }
+          if ($v11 -match '192\.168\.50\.2') { throw 'Active Fleet enrollment helper must not retain the retired direct Ethernet fallback.' }
+          if ($v11 -notmatch "LGCSCONT-CF") { throw 'Active Fleet enrollment helper must default to the Cloudflare SSH alias.' }
           . .\app\LGHS-StockBootstrap-v11.ps1
           $token = New-LghsFleetApiToken
           if ($token.Length -lt 32 -or $token -match '\s') { throw 'Generated Fleet API token is invalid.' }
