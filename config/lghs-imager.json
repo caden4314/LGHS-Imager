@@ -36,15 +36,15 @@
     "autoAdvanceAfterSuccessfulWrite": true
   },
   "repository": {
-    "manifest": "https://raw.githubusercontent.com/caden4314/LGHS-Imager/release-0.6.0-zero-touch/os-list/lghs-os-list.json",
+    "manifest": "https://raw.githubusercontent.com/caden4314/LGHS-Imager/main/os-list/lghs-os-list.json",
     "stockBaseImage": "https://downloads.raspberrypi.com/raspios_arm64_latest",
     "bootstrapGitRepository": "https://github.com/caden4314/LGHS-System.git",
-    "bootstrapGitBranch": "release-0.6.0-fleet-operations"
+    "bootstrapGitBranch": "main"
   },
   "fleet": {
     "deploymentKeyName": "controller_ed25519",
     "generateOnDemand": true,
-    "controllerHost": "192.168.50.2",
+    "controllerHost": "LGCSCONT-CF",
     "controllerUser": "cs_admin",
     "fleetApiUrl": "https://fleet-api.scenicrouteservers.com"
   },
