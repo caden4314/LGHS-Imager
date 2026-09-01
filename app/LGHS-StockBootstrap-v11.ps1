@@ -90,8 +90,8 @@ function New-LghsCloudInitUserData([string]$Role) {
 
     # First boot accepts the verified backup payload if the primary filename is
     # unexpectedly unavailable.
-    $old = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
-    $new = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/firmware/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
+    $old = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/lghs-stage2.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
+    $new = 'if [ -f /boot/firmware/lghs-stage2.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2.sh; elif [ -f /boot/firmware/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/firmware/lghs-stage2-backup.sh; elif [ -f /boot/lghs-stage2.sh ]; then exec /bin/bash /boot/lghs-stage2.sh; elif [ -f /boot/lghs-stage2-backup.sh ]; then exec /bin/bash /boot/lghs-stage2-backup.sh; else echo "LGHS stage2 payload missing" >&2; exit 1; fi'
     if (-not $raw.Contains($old)) { throw 'Could not harden cloud-init stage2 fallback path.' }
     $raw = $raw.Replace($old,$new)
 
